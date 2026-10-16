@@ -1,124 +1,91 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SeismicWatch | Earthquake Prediction Dashboard</title>
-
-    <!-- Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-
-    <!-- Heatmap -->
-    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
-
-    <!-- Fonts + Icons -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-
-    <!-- Styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07111a">
+  <title>Earthquake Forecaster — Seismic Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
 </head>
-
 <body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="/" aria-label="Earthquake Forecaster home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 44 44" fill="none"><path d="M3 23h7l4-12 7 23 5-17 4 9h11" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="brand-copy"><strong>SEISMIC<span>/</span></strong><small>INTELLIGENCE SYSTEM</small></span>
+      </a>
+      <div class="sidebar-caption">WORKSPACE</div>
+      <nav class="main-nav" aria-label="Primary navigation">
+        <a class="nav-item active" href="#overview"><span class="nav-icon">⌂</span><span>Overview</span></a>
+        <a class="nav-item" href="#map-section"><span class="nav-icon">◎</span><span>Live seismic map</span></a>
+        <a class="nav-item" href="#events-section"><span class="nav-icon">≡</span><span>Event stream</span></a>
+        <a class="nav-item" href="#insights-section"><span class="nav-icon">⌁</span><span>Analytics</span></a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sidebar-caption">DATA SOURCES</div>
+        <div class="source-line"><span class="source-dot" id="source-dot"></span><span>USGS Earthquake Feed</span></div>
+        <div class="source-meta" id="source-meta">Waiting for first response</div>
+        <div class="sidebar-foot"><span class="pulse-dot"></span><span>Monitoring workspace</span></div>
+      </div>
+    </aside>
 
-<div class="dashboard">
-
-    <!-- ================= HEADER ================= -->
-    <header class="dashboard-header">
-        <div class="header-content">
-
-            <div class="logo">
-                <i class="fas fa-globe"></i>
-                <h1>SeismicWatch</h1>
-            </div>
-
-            <div class="header-stats">
-                <div class="stat-card">
-                    <span class="stat-value" id="quake-count">0</span>
-                    <span class="stat-label">Quakes</span>
-                </div>
-
-                <div class="stat-card">
-                    <span class="stat-value" id="max-mag">0.0</span>
-                    <span class="stat-label">Max Mag</span>
-                </div>
-
-                <div class="stat-card">
-                    <span class="stat-value" id="high-risk-count">0</span>
-                    <span class="stat-label">High Risk</span>
-                </div>
-            </div>
-
+    <main class="main-content" id="overview">
+      <header class="topbar">
+        <button class="mobile-menu icon-button" id="mobile-menu" aria-label="Toggle navigation">☰</button>
+        <div class="page-intro"><div class="eyebrow">GLOBAL OBSERVATORY <span class="eyebrow-divider"></span> EARTH SCIENCE</div><h1>Seismic overview</h1><p>Explore earthquake activity and model-derived hotspots across the globe.</p></div>
+        <div class="topbar-actions">
+          <div class="utc-block"><span class="tiny-label">LOCAL SYSTEM TIME</span><strong id="clock">--:--:--</strong><span id="date-label">Initialising clock</span></div>
+          <div class="connection-pill" id="connection-pill"><span class="status-dot"></span><span id="connection-text">CONNECTING</span></div>
+          <button class="icon-button" id="refresh-button" aria-label="Refresh data" title="Refresh data"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 9A7 7 0 0 1 18 6l2 1M4 17l2 1a7 7 0 0 0 11.9-3"/></svg></button>
         </div>
-    </header>
+      </header>
 
-    <!-- ================= MAIN ================= -->
-    <main class="dashboard-main">
+      <section class="metrics-grid" aria-label="Earthquake summary metrics">
+        <article class="metric-card metric-primary"><div class="metric-head"><span class="metric-label">EVENTS IN WINDOW</span><span class="metric-glyph cyan">⌁</span></div><div class="metric-value" id="metric-events">—</div><div class="metric-foot"><span class="metric-accent-line"></span><span id="metric-events-foot">Waiting for earthquake data</span></div><div class="metric-spark spark-cyan" aria-hidden="true"><svg viewBox="0 0 120 38" preserveAspectRatio="none"><path d="M0 27 L10 24 L18 28 L27 12 L35 21 L44 18 L54 25 L63 10 L72 17 L80 8 L91 19 L101 5 L110 12 L120 2"/></svg></div></article>
+        <article class="metric-card"><div class="metric-head"><span class="metric-label">STRONGEST EVENT</span><span class="metric-glyph orange">◉</span></div><div class="metric-value" id="metric-strongest">— <small>MAG</small></div><div class="metric-foot"><span class="metric-muted" id="metric-strongest-foot">No event loaded</span></div><div class="metric-spark spark-orange" aria-hidden="true"><svg viewBox="0 0 120 38" preserveAspectRatio="none"><path d="M0 31 L10 28 L20 32 L29 21 L38 25 L48 14 L58 21 L68 8 L78 20 L87 14 L98 23 L109 4 L120 12"/></svg></div></article>
+        <article class="metric-card"><div class="metric-head"><span class="metric-label">HOTSPOTS RETURNED</span><span class="metric-glyph yellow">⌖</span></div><div class="metric-value" id="metric-hotspots">—</div><div class="metric-foot"><span class="metric-muted" id="metric-hotspots-foot">Model endpoint not checked</span></div><div class="metric-blocks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></article>
+        <article class="metric-card"><div class="metric-head"><span class="metric-label">DATA RECENCY</span><span class="metric-glyph blue">◷</span></div><div class="metric-value compact" id="metric-recency">—</div><div class="metric-foot"><span class="metric-muted" id="metric-updated">Not yet refreshed</span></div><div class="recency-track"><span id="recency-track-fill"></span></div></article>
+      </section>
 
-        <!-- ========== MAP SECTION ========== -->
-        <section class="map-section">
-
+      <section class="workspace-grid" id="map-section">
+        <article class="panel map-panel">
+          <div class="panel-header map-header">
+            <div><div class="section-kicker"><span class="live-ring"></span> LIVE GEOSPATIAL FEED</div><h2>Global seismic activity</h2><p>Earthquake events plotted from the selected observation window.</p></div>
             <div class="map-controls">
-
-                <div class="control-group">
-                    <button id="refresh-btn" class="control-btn">
-                        <i class="fas fa-sync-alt"></i> Refresh
-                    </button>
-
-                    <span id="last-updated" class="last-updated">
-                        Loading data...
-                    </span>
-                </div>
-
-                <div id="prediction-result" class="prediction-result"></div>
-
+              <div class="segmented" role="group" aria-label="Observation window"><button data-days="1" class="time-button active">24H</button><button data-days="7" class="time-button">7D</button><button data-days="30" class="time-button">30D</button></div>
+              <label class="filter-select"><span class="sr-only">Minimum magnitude</span><select id="min-magnitude"><option value="0">All magnitudes</option><option value="2.5" selected>M 2.5+</option><option value="4">M 4.0+</option><option value="5">M 5.0+</option></select></label>
             </div>
+          </div>
+          <div class="map-wrap"><div id="seismic-map" role="application" aria-label="Interactive map of earthquake activity"></div><div class="map-overlay-top"><span class="map-live"><i></i> EVENT LAYER ACTIVE</span><button class="map-control-button" id="toggle-hotspots" aria-pressed="true"><span class="hotspot-symbol">✳</span> Hotspots <span class="toggle-state" id="hotspot-state">ON</span></button></div><div class="map-overlay-bottom"><div class="map-coordinates"><span class="mono-label">MAP VIEW</span><strong id="map-center">GLOBAL / 2.0×</strong></div><div class="map-legend"><span><i class="legend-dot legend-low"></i>&lt; 3.0</span><span><i class="legend-dot legend-mid"></i>3.0–4.9</span><span><i class="legend-dot legend-high"></i>5.0+</span><span><i class="legend-ring"></i>Model hotspot</span></div></div></div>
+          <div class="map-footer"><span><span class="footer-mark">↗</span> Select a marker to inspect an event; select the map to request a point estimate.</span><span class="tile-attribution">Map tiles © CARTO · © OpenStreetMap contributors</span></div>
+        </article>
 
-            <div class="map-container">
-                <div id="map"></div>
+        <article class="panel events-panel" id="events-section">
+          <div class="panel-header events-header"><div><div class="section-kicker">OBSERVATION LOG</div><h2>Recent events <span class="count-chip" id="event-count-chip">—</span></h2><p>Newest records in the selected window.</p></div><button class="text-button" id="clear-selection">Clear focus <span>↗</span></button></div>
+          <div class="events-table-head"><span>MAG</span><span>LOCATION / EVENT</span><span>DEPTH</span></div>
+          <div class="events-list" id="events-list" aria-live="polite"><div class="loading-state"><span class="spinner"></span><span>Connecting to seismic feed…</span></div></div>
+          <div class="events-footer"><span id="events-footer-text">No records loaded</span><button class="subtle-button" id="load-more">Refresh feed <span>↻</span></button></div>
+        </article>
+      </section>
 
-                <!-- Loading Overlay -->
-                <div id="loading-overlay" class="loading-overlay">
-                    <div class="loading-spinner"></div>
-                </div>
-            </div>
-
-        </section>
-
-        <!-- ========== SIDEBAR ========== -->
-        <aside class="sidebar">
-
-            <div class="sidebar-header">
-                <h3><i class="fas fa-list"></i> Earthquakes</h3>
-
-                <div class="filter-controls">
-
-                    <select id="time-filter" class="filter-select">
-                        <option value="1">24 Hours</option>
-                        <option value="7" selected>7 Days</option>
-                        <option value="30">30 Days</option>
-                    </select>
-
-                    <select id="magnitude-filter" class="filter-select">
-                        <option value="2.5">All (2.5+)</option>
-                        <option value="4.0">4.0+</option>
-                        <option value="6.0">6.0+</option>
-                    </select>
-
-                </div>
-            </div>
-
-            <div id="quake-list" class="quake-list"></div>
-
-        </aside>
-
+      <section class="lower-grid" id="insights-section">
+        <article class="panel chart-panel"><div class="panel-header small-panel-header"><div><div class="section-kicker">DISTRIBUTION</div><h2>Magnitude profile</h2><p>Event count by observed magnitude band.</p></div><span class="chart-tag">CURRENT WINDOW</span></div><div class="magnitude-chart" id="magnitude-chart"><div class="chart-placeholder">Magnitude distribution will appear when event data loads.</div></div><div class="chart-note"><span class="note-dot"></span><span>Calculated from the events returned by the API.</span></div></article>
+        <article class="panel chart-panel"><div class="panel-header small-panel-header"><div><div class="section-kicker">MODEL OUTPUT</div><h2>Hotspot intelligence</h2><p>Summary of the hotspot endpoint and model availability.</p></div><span class="model-status-chip" id="model-status-chip"><i></i> CHECKING</span></div><div class="insight-summary"><div class="insight-orb"><svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="15"/><circle cx="24" cy="24" r="7"/><path d="M24 2v9M24 37v9M2 24h9M37 24h9"/></svg></div><div><div class="insight-value" id="insight-hotspot-value">— <span>locations</span></div><div class="insight-title">Candidate hotspots returned</div><p id="insight-description">Hotspots are exploratory model output, not a guarantee of future earthquakes.</p></div></div><div class="insight-detail-row"><span>Model metadata</span><strong id="model-detail">Waiting for API</strong></div><div class="insight-detail-row"><span>Last successful data fetch</span><strong id="last-success">—</strong></div><div class="disclaimer"><span>ⓘ</span><span>This interface does not provide an official earthquake early-warning service or guarantee future events.</span></div></article>
+      </section>
+      <footer class="app-footer"><span>EARTHQUAKE FORECASTER <span class="footer-separator">/</span> SEISMIC INTELLIGENCE</span><span>Observational data and exploratory model outputs · Always verify with official agencies</span></footer>
     </main>
+  </div>
 
-</div>
+  <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
+  <div class="prediction-modal" id="prediction-modal" aria-hidden="true"><div class="prediction-backdrop" data-close-prediction></div><section class="prediction-card" role="dialog" aria-modal="true" aria-labelledby="prediction-title"><button class="modal-close" data-close-prediction aria-label="Close">×</button><div class="section-kicker">POINT ANALYSIS</div><h2 id="prediction-title">Coordinate assessment</h2><p class="modal-subtitle" id="prediction-coordinates">—</p><div class="prediction-content" id="prediction-content"><span class="spinner"></span><span>Requesting model estimate…</span></div><div class="disclaimer"><span>ⓘ</span><span>Model output is exploratory and must not be used as an emergency warning.</span></div></section></div>
 
-<!-- ================= SCRIPTS ================= -->
-<script src="{{ url_for('static', filename='script.js') }}"></script>
-
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="{{ url_for('static', filename='dashboard.js') }}" defer></script>
 </body>
 </html>
