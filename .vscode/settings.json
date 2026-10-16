@@ -1,0 +1,23 @@
+{
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/.venv/**": true,
+    "**/venv/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/site-packages/**": true
+  },
+  "files.exclude": {
+    "**/.git": true,
+    "**/.pytest_cache": true,
+    "**/__pycache__": true
+  },
+  "search.exclude": {
+    "**/.venv": true,
+    "**/venv": true,
+    "**/__pycache__": true,
+    "**/.pytest_cache": true
+  },
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe"
+}
