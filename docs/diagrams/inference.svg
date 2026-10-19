@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 250" width="780" height="250" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#4a5a66"/></marker>
+    <style>.t{font-size:11.5px;font-weight:600;fill:#1b2a35}.s{font-size:9.6px;fill:#4a5a66}.ln{stroke:#4a5a66;stroke-width:1.3;fill:none}</style>
+  </defs>
+  <rect x="16" y="20" width="150" height="70" rx="6" fill="#eaf6f4" stroke="#0e7d74"/><text x="26" y="40" class="t">Query parameters</text><text x="26" y="56" class="s">lat 38.3 · lon 142.4</text><text x="26" y="70" class="s">depth 30 km</text><text x="26" y="84" class="s">(validated by parse_number)</text>
+  <rect x="16" y="140" width="150" height="86" rx="6" fill="#fff6e5" stroke="#d08700"/><text x="26" y="160" class="t">Context catalogue</text><text x="26" y="176" class="s">USGS M ≥ 4.5, last 30 days</text><text x="26" y="190" class="s">cached 10 min</text><text x="26" y="204" class="s">fetch fails → 503</text><text x="26" y="218" class="s">context_unavailable</text>
+  <rect x="200" y="20" width="160" height="56" rx="6" fill="#fff" stroke="#3b5bdb"/><text x="210" y="40" class="t">plate_distance_km()</text><text x="210" y="56" class="s">nearest of 6051 segments</text><text x="210" y="69" class="s">→ 134.1 km</text>
+  <rect x="200" y="150" width="160" height="56" rx="6" fill="#fff" stroke="#3b5bdb"/><text x="210" y="170" class="t">causal_density()</text><text x="210" y="186" class="s">events in ±1° box, [t−30d, t)</text><text x="210" y="199" class="s">→ 1</text>
+  <rect x="394" y="70" width="160" height="96" rx="6" fill="#fff" stroke="#3b5bdb"/><text x="404" y="90" class="t">build_feature_matrix()</text><text x="404" y="108" class="s" font-family="Consolas, monospace">[38.3, 142.4, 30.0,</text><text x="404" y="122" class="s" font-family="Consolas, monospace"> 1, 134.1]</text><text x="404" y="140" class="s">order = FEATURE_NAMES</text><text x="404" y="154" class="s">NaN/inf → ValueError</text>
+  <rect x="588" y="20" width="176" height="56" rx="6" fill="#fff" stroke="#6d3fd1"/><text x="598" y="40" class="t">scaler.transform()</text><text x="598" y="56" class="s">training μ, σ per feature</text>
+  <rect x="588" y="92" width="176" height="56" rx="6" fill="#fff" stroke="#6d3fd1"/><text x="598" y="112" class="t">EarthquakeNN (eval)</text><text x="598" y="128" class="s">sigmoid → p = 0.2834</text>
+  <rect x="588" y="164" width="176" height="62" rx="6" fill="#eaf6f4" stroke="#0e7d74"/><text x="598" y="184" class="t">relative_band()</text><text x="598" y="200" class="s">p / base_rate = 0.2834 / 0.2515</text><text x="598" y="214" class="s">= 1.127 → near_base_rate</text>
+  <path d="M166 50 H199" class="ln" marker-end="url(#a)"/><path d="M90 90 V120 H280 V149" class="ln" marker-end="url(#a)"/>
+  <path d="M166 183 H199" class="ln" marker-end="url(#a)"/>
+  <path d="M360 48 H376 V100 H393" class="ln" marker-end="url(#a)"/><path d="M360 178 H376 V136 H393" class="ln" marker-end="url(#a)"/>
+  <path d="M554 118 H570 V48 H587" class="ln" marker-end="url(#a)"/>
+  <path d="M676 76 V91" class="ln" marker-end="url(#a)"/><path d="M676 148 V163" class="ln" marker-end="url(#a)"/>
+  <text x="16" y="244" class="s">Values are from a real request on 2026-10-18 (GET /api/predict?lat=38.3&amp;lon=142.4&amp;depth=30). lat/lon/depth flow into the matrix directly.</text>
+</svg>

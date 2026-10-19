@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 170" width="780" height="170" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#4a5a66"/></marker>
+    <style>.t{font-size:10.5px;font-weight:600;fill:#1b2a35}.s{font-size:9.2px;fill:#4a5a66}.ln{stroke:#4a5a66;stroke-width:1.2}</style>
+  </defs>
+  <rect x="14" y="60" width="72" height="50" rx="5" fill="#eaf6f4" stroke="#0e7d74"/><text x="50" y="82" text-anchor="middle" class="t">input</text><text x="50" y="97" text-anchor="middle" class="s">5 scaled</text>
+  <rect x="104" y="40" width="80" height="90" rx="5" fill="#fff" stroke="#3b5bdb"/><text x="144" y="78" text-anchor="middle" class="t">Linear 5→32</text><text x="144" y="94" text-anchor="middle" class="s">+ ReLU</text>
+  <rect x="200" y="40" width="64" height="90" rx="5" fill="#f3effc" stroke="#6d3fd1"/><text x="232" y="78" text-anchor="middle" class="t">BatchNorm</text><text x="232" y="94" text-anchor="middle" class="s">32</text>
+  <rect x="280" y="20" width="86" height="130" rx="5" fill="#fff" stroke="#3b5bdb"/><text x="323" y="78" text-anchor="middle" class="t">Linear 32→64</text><text x="323" y="94" text-anchor="middle" class="s">+ ReLU</text>
+  <rect x="382" y="20" width="64" height="130" rx="5" fill="#f3effc" stroke="#6d3fd1"/><text x="414" y="78" text-anchor="middle" class="t">BatchNorm</text><text x="414" y="94" text-anchor="middle" class="s">64</text>
+  <rect x="462" y="40" width="86" height="90" rx="5" fill="#fff" stroke="#3b5bdb"/><text x="505" y="78" text-anchor="middle" class="t">Linear 64→32</text><text x="505" y="94" text-anchor="middle" class="s">+ ReLU</text>
+  <rect x="564" y="65" width="76" height="40" rx="5" fill="#fff" stroke="#3b5bdb"/><text x="602" y="89" text-anchor="middle" class="t">Linear 32→1</text>
+  <rect x="656" y="65" width="56" height="40" rx="5" fill="#fff6e5" stroke="#d08700"/><text x="684" y="89" text-anchor="middle" class="t">sigmoid</text>
+  <text x="742" y="89" text-anchor="middle" class="t">p</text>
+  <g class="ln"><line x1="86" y1="85" x2="103" y2="85" marker-end="url(#a)"/><line x1="184" y1="85" x2="199" y2="85" marker-end="url(#a)"/><line x1="264" y1="85" x2="279" y2="85" marker-end="url(#a)"/><line x1="366" y1="85" x2="381" y2="85" marker-end="url(#a)"/><line x1="446" y1="85" x2="461" y2="85" marker-end="url(#a)"/><line x1="548" y1="85" x2="563" y2="85" marker-end="url(#a)"/><line x1="640" y1="85" x2="655" y2="85" marker-end="url(#a)"/><line x1="712" y1="85" x2="733" y2="85" marker-end="url(#a)"/></g>
+  <text x="14" y="164" class="s">4,609 trainable parameters (plus BatchNorm running statistics). Box height loosely indicates layer width.</text>
+</svg>

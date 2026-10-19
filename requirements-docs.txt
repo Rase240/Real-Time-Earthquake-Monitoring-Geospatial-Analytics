@@ -1,0 +1,4 @@
+# Tools for building docs/learning-guide.pdf (python docs/build_guide.py). Chrome or Edge must be installed.
+markdown>=3.6,<4
+pygments>=2.17,<3
+pymupdf>=1.24,<2

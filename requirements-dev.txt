@@ -1,0 +1,3 @@
+# Test tooling (in addition to the runtime dependencies).
+-r requirements.txt
+pytest>=9.0.3,<10.0.0

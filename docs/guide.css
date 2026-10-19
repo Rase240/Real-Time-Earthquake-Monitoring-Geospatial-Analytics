@@ -1,0 +1,115 @@
+/* Print stylesheet for the TerraWatcher learning guide (rendered by headless Chrome). */
+@page { size: A4; margin: 20mm 17mm 18mm 17mm; }
+@page :first { margin: 0; }
+
+:root {
+  --ink: #1b2a35;
+  --muted: #5b6b77;
+  --rule: #d5dee4;
+  --soft: #f2f6f8;
+  --accent: #0e7d74;
+  --accent-soft: #e3f3f1;
+  --violet: #6d3fd1;
+  --warn: #9a5b00;
+  --warn-soft: #fff5e0;
+  --danger: #b42318;
+}
+* { box-sizing: border-box; }
+html { font-size: 10.2pt; }
+body {
+  margin: 0; color: var(--ink);
+  font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+
+/* ---------- Cover ---------- */
+.cover {
+  position: relative; height: 297mm; width: 210mm; overflow: hidden;
+  background: #0b141b; color: #e8f0f4; page-break-after: always;
+}
+.cover-grid {
+  position: absolute; inset: 0; opacity: 0.35;
+  background-image: linear-gradient(rgba(79, 209, 197, 0.12) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(79, 209, 197, 0.12) 1px, transparent 1px);
+  background-size: 12mm 12mm;
+}
+.cover-inner { position: relative; padding: 34mm 22mm 0; }
+.cover-kicker { font: 600 9pt "Cascadia Mono", Consolas, monospace; letter-spacing: 0.18em; text-transform: uppercase; color: #4fd1c5; }
+.cover-title { font-size: 44pt; margin: 6mm 0 2mm; letter-spacing: -0.02em; font-weight: 700; color: #fff; page-break-before: avoid; }
+.cover-sub { font-size: 16pt; color: #b9cad4; margin-bottom: 14mm; }
+.cover-img { width: 100%; border-radius: 6px; border: 1px solid #2a3d4a; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
+.cover-meta { margin-top: 12mm; font-size: 10.5pt; color: #b9cad4; line-height: 1.7; }
+.cover-foot { position: absolute; left: 22mm; right: 22mm; top: 268mm; font: 8.5pt "Cascadia Mono", Consolas, monospace; color: #7f95a3; border-top: 1px solid #2a3d4a; padding-top: 4mm; }
+
+/* ---------- TOC ---------- */
+.toc { page-break-after: always; }
+.toc-title { margin-top: 0; }
+.toc ol { list-style: none; margin: 0; padding: 0; column-count: 2; column-gap: 9mm; }
+.toc li { break-inside: avoid; margin: 0; }
+.toc li a { display: flex; align-items: baseline; color: var(--ink); text-decoration: none; }
+.toc li.chapter { margin-top: 5px; font-weight: 600; font-size: 9.4pt; break-after: avoid; }
+.toc li.section { padding-left: 12px; font-size: 8.1pt; line-height: 1.38; color: var(--muted); }
+.toc li.section a { color: #3b4a55; }
+.toc .dots { flex: 1; border-bottom: 1px dotted #aab7c0; margin: 0 6px; transform: translateY(-3px); }
+.toc .pg { font-variant-numeric: tabular-nums; min-width: 18px; text-align: right; }
+
+/* ---------- Headings ---------- */
+h1, h2, h3, h4 { line-height: 1.25; break-after: avoid; page-break-after: avoid; }
+main h1 {
+  page-break-before: always; font-size: 22pt; margin: 0 0 6mm; padding-bottom: 3mm;
+  border-bottom: 2px solid var(--accent); letter-spacing: -0.01em;
+}
+h2 { font-size: 14pt; margin: 7mm 0 2.5mm; color: #12303b; }
+h3 { font-size: 11.2pt; margin: 5mm 0 2mm; color: #12303b; }
+h4 { font-size: 10.2pt; margin: 4mm 0 1.5mm; }
+p { margin: 0 0 2.6mm; orphans: 3; widows: 3; }
+ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+li { margin: 0.6mm 0; }
+a { color: var(--accent); }
+strong { color: #0f222c; }
+hr { border: 0; border-top: 1px solid var(--rule); margin: 5mm 0; }
+
+/* ---------- Code ---------- */
+code { font-family: "Cascadia Mono", "Cascadia Code", Consolas, "DejaVu Sans Mono", monospace; font-size: 8.6pt; background: var(--soft); padding: 0.2mm 1mm; border-radius: 2px; }
+.hl, pre { break-inside: avoid; page-break-inside: avoid; }
+.hl { background: #f7f9fa !important; border: 1px solid var(--rule); border-left: 3px solid var(--accent); border-radius: 3px; margin: 0 0 3.5mm; }
+.hl pre, pre { margin: 0; padding: 2.6mm 3.2mm; font-size: 7.7pt; line-height: 1.42; white-space: pre-wrap; word-break: break-word; }
+.hl pre code, pre code { background: none; padding: 0; font-size: inherit; }
+.src-label {
+  font: 600 7.6pt "Cascadia Mono", Consolas, monospace; color: var(--accent); margin: 3mm 0 0;
+  padding: 1mm 3mm; background: var(--accent-soft); border: 1px solid var(--rule); border-bottom: 0; border-radius: 3px 3px 0 0; display: inline-block;
+  break-after: avoid; page-break-after: avoid;
+}
+.src-label + .hl { border-top-left-radius: 0; }
+
+/* ---------- Tables ---------- */
+table { width: 100%; border-collapse: collapse; margin: 1mm 0 4mm; font-size: 8.9pt; break-inside: avoid; page-break-inside: avoid; }
+th, td { border-bottom: 1px solid var(--rule); padding: 1.4mm 2mm; text-align: left; vertical-align: top; }
+th { background: var(--soft); font-weight: 600; color: #22333e; border-bottom: 1.5px solid #b9c6ce; }
+td code { font-size: 8pt; }
+table.long { break-inside: auto; page-break-inside: auto; }
+
+/* ---------- Figures & callouts ---------- */
+figure { margin: 3mm 0 5mm; break-inside: avoid; page-break-inside: avoid; text-align: center; }
+figure img { max-width: 100%; }
+figure img.shot { border: 1px solid var(--rule); border-radius: 4px; }
+figcaption { font-size: 8.6pt; color: var(--muted); margin-top: 2mm; text-align: left; }
+figcaption b { color: var(--ink); }
+.note, .warn, .tip, .future {
+  border-radius: 4px; padding: 2.6mm 3.6mm; margin: 2mm 0 4mm; font-size: 9.4pt; break-inside: avoid; page-break-inside: avoid;
+}
+.note { background: #eef4fb; border-left: 3px solid #3b6fb6; }
+.warn { background: var(--warn-soft); border-left: 3px solid #d08700; }
+.tip { background: var(--accent-soft); border-left: 3px solid var(--accent); }
+.future { background: #f3effc; border-left: 3px solid var(--violet); }
+.note p:last-child, .warn p:last-child, .tip p:last-child, .future p:last-child { margin-bottom: 0; }
+.label { font: 700 7.6pt "Cascadia Mono", Consolas, monospace; letter-spacing: 0.08em; text-transform: uppercase; margin-right: 2mm; }
+.note .label { color: #3b6fb6; } .warn .label { color: var(--warn); } .tip .label { color: var(--accent); } .future .label { color: var(--violet); }
+
+.qa { break-inside: avoid; page-break-inside: avoid; margin: 0 0 3.2mm; }
+.qa .q { font-weight: 600; color: #12303b; margin-bottom: 0.8mm; }
+.qa .a { margin-left: 4mm; }
+.qa .a p { margin-bottom: 1.4mm; }
+.page-break { page-break-after: always; }
+.kbd { font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.4pt; }
+.checklist li { list-style: "☐  "; }

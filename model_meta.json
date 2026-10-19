@@ -1,0 +1,144 @@
+{
+  "trained_at": "2026-10-18T21:35:45Z",
+  "feature_names": [
+    "latitude",
+    "longitude",
+    "depth_km",
+    "local_density_30d",
+    "plate_distance_km"
+  ],
+  "interpretation": "For an earthquake that has been recorded with magnitude >= 4.5, the model estimates the probability that its magnitude is >= 5.0, from its location, depth, the number of M>=4.5 events within +/-1.0 degree in the preceding 30 days, and its distance to the nearest mapped plate boundary. It does not estimate whether, when or where an earthquake will occur.",
+  "label": {
+    "catalog_min_mag": 4.5,
+    "significant_mag": 5.0,
+    "train_positive_rate": 0.2515
+  },
+  "data": {
+    "source": "USGS FDSN event web service (eventtype=earthquake)",
+    "start": "2024-11-28",
+    "end": "2026-10-18",
+    "catalog_events": 15855,
+    "samples": 15362
+  },
+  "split": {
+    "method": "chronological 70/15/15",
+    "train": {
+      "n": 10753,
+      "positive_rate": 0.2515,
+      "from": "2024-11-28",
+      "to": "2026-03-23"
+    },
+    "validation": {
+      "n": 2304,
+      "positive_rate": 0.2413,
+      "from": "2026-03-23",
+      "to": "2026-07-11"
+    },
+    "test": {
+      "n": 2305,
+      "positive_rate": 0.2716,
+      "from": "2026-07-11",
+      "to": "2026-10-18"
+    }
+  },
+  "training": {
+    "epochs_run": 25,
+    "best_epoch": 10,
+    "best_val_log_loss": 0.54772,
+    "batch_size": 256,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "patience": 15,
+    "optimizer": "Adam",
+    "loss": "binary cross-entropy",
+    "seed": 42
+  },
+  "metrics": {
+    "test": {
+      "brier": 0.197,
+      "log_loss": 0.5837,
+      "roc_auc": 0.5703,
+      "average_precision": 0.3312
+    },
+    "validation": {
+      "brier": 0.1812,
+      "log_loss": 0.5477,
+      "roc_auc": 0.5662,
+      "average_precision": 0.2941
+    },
+    "test_at_threshold": {
+      "threshold": 0.152,
+      "precision": 0.2775,
+      "recall": 0.9712,
+      "f1": 0.4317,
+      "accuracy": 0.3054,
+      "confusion_matrix": {
+        "tn": 96,
+        "fp": 1583,
+        "fn": 18,
+        "tp": 608
+      }
+    },
+    "brier_skill_vs_base_rate": 0.0061,
+    "majority_class_accuracy": 0.7284,
+    "test_calibration": [
+      {
+        "bin": "0.0-0.1",
+        "n": 28,
+        "mean_predicted": 0.0907,
+        "observed_rate": 0.25
+      },
+      {
+        "bin": "0.1-0.2",
+        "n": 689,
+        "mean_predicted": 0.1732,
+        "observed_rate": 0.2279
+      },
+      {
+        "bin": "0.2-0.3",
+        "n": 1307,
+        "mean_predicted": 0.2432,
+        "observed_rate": 0.277
+      },
+      {
+        "bin": "0.3-0.4",
+        "n": 228,
+        "mean_predicted": 0.3251,
+        "observed_rate": 0.3421
+      },
+      {
+        "bin": "0.4-0.5",
+        "n": 53,
+        "mean_predicted": 0.4461,
+        "observed_rate": 0.4151
+      }
+    ]
+  },
+  "baselines": {
+    "Constant train base rate": {
+      "brier": 0.1982,
+      "log_loss": 0.5859,
+      "roc_auc": 0.5,
+      "average_precision": 0.2716
+    },
+    "5-degree regional rate (train history)": {
+      "brier": 0.1989,
+      "log_loss": 0.5882,
+      "roc_auc": 0.5242,
+      "average_precision": 0.2946
+    },
+    "Logistic regression (same features)": {
+      "brier": 0.1967,
+      "log_loss": 0.5819,
+      "roc_auc": 0.5524,
+      "average_precision": 0.3228
+    }
+  },
+  "limitations": [
+    "Conditional on an event having occurred: the score is not a probability that an earthquake will happen.",
+    "Magnitude types differ across networks (mb, Mww, ml...); the label mixes them as reported by USGS.",
+    "Aftershock sequences that straddle split boundaries make adjacent periods correlated.",
+    "Latitude/longitude are raw inputs, so the model partly memorises regional behaviour; it is not validated on regions absent from training.",
+    "Evaluated on a single recent test period; results can change with each retraining."
+  ]
+}

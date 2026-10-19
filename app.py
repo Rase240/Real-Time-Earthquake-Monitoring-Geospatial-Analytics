@@ -1,496 +1,353 @@
-import sys
-if hasattr(sys.stdout, 'reconfigure'):
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-if hasattr(sys.stderr, 'reconfigure'):
-    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+"""
+TerraWatcher — Real-Time Earthquake Analytics & Geospatial Intelligence.
 
-from flask import Flask, render_template, jsonify, request
-import pandas as pd
-import requests
-from datetime import datetime, timedelta, timezone
-import json
+Flask application: serves the dashboard and a small JSON API.
+
+  GET /                      dashboard (templates/index.html)
+  GET /api/health            readiness of model, plate data and upstream cache
+  GET /api/earthquakes       observed events from USGS (normalised)
+  GET /api/hotspots          observed activity clusters (M4.5+, last 30 days)
+  GET /api/predict           conditional severity score for a coordinate
+  GET /api/plates            plate boundary GeoJSON for the map overlay
+  GET /api/model-info        model metadata and evaluation results
+
+The frontend is served from the same origin, so no CORS headers are emitted.
+"""
+import logging
 import math
-import numpy as np
-import torch
-import torch.nn as nn
-import joblib
 import os
+import threading
 import time
-import warnings
+from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
 
-warnings.filterwarnings("ignore")
+import numpy as np
+from flask import Flask, jsonify, render_template, request, send_file
+from werkzeug.exceptions import HTTPException
+
+import config
+import features as F
+import usgs_client
+from ml_model import ModelBundle
+from usgs_client import UpstreamError
+
+logging.basicConfig(level=config.LOG_LEVEL, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("terrawatcher")
 
 app = Flask(__name__)
+app.json.sort_keys = False
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_FILE = os.path.join(BASE_DIR, 'earthquake_model_v1.pth')
-SCALER_FILE = os.path.join(BASE_DIR, 'scaler.pkl')
-TECTONIC_DATA_PATHS = [
-    os.path.join(BASE_DIR, 'data', 'tectonic_plates.geojson'),
-    os.path.join(BASE_DIR, 'data', 'tectonic_plates.Geojson')
-]
-
-FEATURE_NAMES = [
-    'latitude', 'longitude', 'depth',
-    'local_density', 'plate_distance'
-]
-
-# Configure Device for GPU/MPS Acceleration
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else "cpu")
-print(f"[DEVICE] Using compute device: {DEVICE}")
-
-# Simple in-memory cache for USGS earthquake requests to respect rate limits
-# Key: (days, min_mag) -> (timestamp, data_dict)
-USGS_CACHE = {}
-USGS_CACHE_TTL = 60  # seconds
-
-# =======================
-# Neural Network
-# =======================
-class EarthquakeNN(nn.Module):
-    def __init__(self):
-        super().__init__()
-        # Input size is 5
-        self.net = nn.Sequential(
-            nn.Linear(5, 32),
-            nn.ReLU(),
-            nn.BatchNorm1d(32),
-
-            nn.Linear(32, 64),
-            nn.ReLU(),
-            nn.BatchNorm1d(64),
-
-            nn.Linear(64, 32),
-            nn.ReLU(),
-
-            nn.Linear(32, 1),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        return self.net(x)
+HOTSPOT_CELL_DEG = 2.0
+HOTSPOT_MIN_EVENTS = 3
+SOURCE_NAME = "USGS FDSN event web service"
 
 
-# =======================
-# Model Class
-# =======================
-class EarthquakeModel:
-    def __init__(self):
-        self.model = None
-        self.scaler = None
-        self.plate_cache = {}
-        self.MAX_CACHE_SIZE = 16384
-
-        self.plate_lines = self.load_tectonic_data()
-        self.load_model()
-
-    # -----------------------
-    # Load tectonic data
-    # -----------------------
-    def load_tectonic_data(self):
-        target_path = None
-        for path in TECTONIC_DATA_PATHS:
-            if os.path.exists(path):
-                target_path = path
-                break
-
-        if not target_path:
-            print("[WARNING] Tectonic plates file not found. Plate distance will default to 0.")
-            return []
-
-        try:
-            with open(target_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            lines = []
-            for feature in data.get('features', []):
-                geom = feature.get('geometry') or {}
-                coords = geom.get('coordinates') or []
-                geom_type = geom.get('type')
-
-                if geom_type == 'MultiLineString':
-                    for line in coords:
-                        lines.append(line)
-                elif geom_type == 'LineString':
-                    lines.append(coords)
-
-            print(f"[DATA] Loaded {len(lines)} tectonic boundaries from {os.path.basename(target_path)}")
-            return lines
-
-        except Exception as e:
-            print(f"[ERROR] Failed to load tectonic data: {e}")
-            return []
-
-    # -----------------------
-    # Distance calculation
-    # -----------------------
-    @staticmethod
-    def point_to_segment_distance(px, py, x1, y1, x2, y2):
-        """
-        Calculates distance in degrees between point (px=lon, py=lat) and segment (x1, y1)-(x2, y2).
-        Properly handles antimeridian longitude wraparound.
-        """
-        # Longitude difference wrapped to [-180, 180]
-        dx = (x2 - x1 + 180.0) % 360.0 - 180.0
-        dpx = (px - x1 + 180.0) % 360.0 - 180.0
-        dy = y2 - y1
-        dpy = py - y1
-
-        l2 = dx * dx + dy * dy
-        if l2 == 0:
-            return (dpx * dpx + dpy * dpy) ** 0.5
-
-        t = max(0.0, min(1.0, (dpx * dx + dpy * dy) / l2))
-
-        proj_x = t * dx
-        proj_y = t * dy
-
-        return ((dpx - proj_x) ** 2 + (dpy - proj_y) ** 2) ** 0.5
-
-    def compute_plate_distance_single(self, lat, lon):
-        if not self.plate_lines:
-            return 0.0
-
-        lat = max(-90.0, min(90.0, float(lat)))
-        lon = (float(lon) + 180.0) % 360.0 - 180.0
-
-        key = (round(lat, 2), round(lon, 2))
-        if key in self.plate_cache:
-            return self.plate_cache[key]
-
-        min_dist = float('inf')
-
-        for line in self.plate_lines:
-            for i in range(len(line) - 1):
-                lon1, lat1 = line[i]
-                lon2, lat2 = line[i + 1]
-
-                dist = self.point_to_segment_distance(lon, lat, lon1, lat1, lon2, lat2)
-                if dist < min_dist:
-                    min_dist = dist
-
-        # Keep cache bounded to prevent unbounded memory growth
-        if len(self.plate_cache) >= self.MAX_CACHE_SIZE:
-            for k in list(self.plate_cache.keys())[:1000]:
-                del self.plate_cache[k]
-
-        self.plate_cache[key] = min_dist
-        return min_dist
-
-    def compute_plate_distance(self, df):
-        if df.empty or 'latitude' not in df or 'longitude' not in df:
-            df['plate_distance'] = []
-            return df
-        df['plate_distance'] = df.apply(
-            lambda r: self.compute_plate_distance_single(r['latitude'], r['longitude']),
-            axis=1
-        )
-        return df
-
-    # -----------------------
-    # Feature engineering
-    # -----------------------
-    def compute_density(self, df, radius=1.0):
-        if df.empty or 'latitude' not in df or 'longitude' not in df:
-            df['local_density'] = []
-            return df
-
-        lats = df['latitude'].values
-        lons = df['longitude'].values
-        densities = []
-
-        for lat, lon in zip(lats, lons):
-            # Vectorized with antimeridian longitude wraparound
-            dlon = np.abs((lons - lon + 180.0) % 360.0 - 180.0)
-            dlat = np.abs(lats - lat)
-            nearby = (dlat <= radius) & (dlon <= radius)
-            densities.append(int(nearby.sum()))
-
-        df['local_density'] = densities
-        return df
-
-    def get_live_local_density(self, lat, lng, radius=1.0, days=30):
-        """Fetches live context for inference, safely clamped to geographic limits."""
-        lat = max(-90.0, min(90.0, float(lat)))
-        lng = (float(lng) + 180.0) % 360.0 - 180.0
-
-        end_date = datetime.now(timezone.utc)
-        start_date = end_date - timedelta(days=days)
-
-        min_lat = max(-90.0, lat - radius)
-        max_lat = min(90.0, lat + radius)
-        min_lon = max(-180.0, lng - radius)
-        max_lon = min(180.0, lng + radius)
-
-        url = (
-            f"https://earthquake.usgs.gov/fdsnws/event/1/query?"
-            f"format=geojson&starttime={start_date.strftime('%Y-%m-%d')}"
-            f"&endtime={end_date.strftime('%Y-%m-%d')}"
-            f"&minlatitude={min_lat}&maxlatitude={max_lat}"
-            f"&minlongitude={min_lon}&maxlongitude={max_lon}"
-        )
-        try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                features = response.json().get('features', [])
-                return len(features)
-        except Exception:
-            pass
-        return 0
-
-    # -----------------------
-    # Load model
-    # -----------------------
-    def load_model(self):
-        """
-        Deterministically loads model weights and scaler from disk.
-        Does NOT trigger training during import or server startup.
-        """
-        if os.path.exists(MODEL_FILE) and os.path.exists(SCALER_FILE):
-            try:
-                model = EarthquakeNN()
-                # Secure load with weights_only=True
-                model.load_state_dict(torch.load(MODEL_FILE, map_location=DEVICE, weights_only=True))
-                model.to(DEVICE)
-                model.eval()
-
-                scaler = joblib.load(SCALER_FILE)
-                self.model = model
-                self.scaler = scaler
-
-                print(f"[MODEL] Loaded pre-trained model and scaler successfully on {DEVICE}")
-                return True
-            except Exception as e:
-                print(f"[ERROR] Load error: {e}")
-                self.model = None
-                self.scaler = None
-                return False
-        else:
-            missing = []
-            if not os.path.exists(MODEL_FILE):
-                missing.append(os.path.basename(MODEL_FILE))
-            if not os.path.exists(SCALER_FILE):
-                missing.append(os.path.basename(SCALER_FILE))
-            print(f"[WARNING] Missing model artifact(s): {', '.join(missing)}. Inference is disabled.")
-            print("   Run `python train_model.py` to train and save model artifacts.")
-            self.model = None
-            self.scaler = None
-            return False
-
-    def predict(self, lat, lng, depth=10.0, live_density=None):
-        if self.model is None or self.scaler is None:
-            return {"error": "Model not loaded"}
-
-        lat = max(-90.0, min(90.0, float(lat)))
-        lng = (float(lng) + 180.0) % 360.0 - 180.0
-        depth = max(0.0, min(700.0, float(depth)))
-
-        if live_density is None:
-            local_density = self.get_live_local_density(lat, lng)
-        else:
-            local_density = float(live_density)
-
-        plate_distance = self.compute_plate_distance_single(lat, lng)
-
-        x = [[lat, lng, depth, local_density, plate_distance]]
-        x = self.scaler.transform(x)
-
-        x = torch.tensor(x, dtype=torch.float32).to(DEVICE)
-
-        with torch.no_grad():
-            p = float(self.model(x).item())
-
-        return {
-            "probability": round(p, 4),
-            "risk": "high" if p > 0.7 else "medium" if p > 0.3 else "low",
-            "metadata": {
-                "local_density_last_30_days": int(local_density),
-                "plate_distance": round(plate_distance, 4)
-            }
-        }
+# =============================================================================
+# Errors
+# =============================================================================
+class ApiError(Exception):
+    def __init__(self, message, status=400, code="bad_request"):
+        super().__init__(message)
+        self.message, self.status, self.code = message, status, code
 
 
-# Initialize globally
-model = EarthquakeModel()
+def error_response(message, status, code):
+    return jsonify({"error": message, "code": code, "status": status}), status
 
-# =======================
-# FLASK ROUTES
-# =======================
-@app.route('/')
-@app.route('/dashboard-v2')
+
+@app.errorhandler(ApiError)
+def _api_error(exc):
+    return error_response(exc.message, exc.status, exc.code)
+
+
+@app.errorhandler(UpstreamError)
+def _upstream_error(exc):
+    return error_response(str(exc), exc.status, exc.code)
+
+
+@app.errorhandler(HTTPException)
+def _http_error(exc):
+    if request.path.startswith("/api/"):
+        return error_response(exc.description or exc.name, exc.code, exc.name.lower().replace(" ", "_"))
+    return exc
+
+
+@app.errorhandler(Exception)
+def _unhandled(exc):
+    log.exception("Unhandled error on %s", request.path)
+    return error_response("Internal server error", 500, "internal_error")
+
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    if resp.mimetype == "text/html":
+        resp.headers.setdefault("Content-Security-Policy", (
+            "default-src 'self'; "
+            "script-src 'self' https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; "
+            "font-src https://fonts.gstatic.com; "
+            "img-src 'self' data: https://server.arcgisonline.com; "
+            "connect-src 'self'; frame-ancestors 'none'"
+        ))
+    return resp
+
+
+# =============================================================================
+# Request parsing
+# =============================================================================
+def parse_number(name, default=None, lo=None, hi=None, cast=float, required=False, aliases=()):
+    raw = request.args.get(name)
+    for alias in aliases:
+        raw = raw if raw not in (None, "") else request.args.get(alias)
+    if raw in (None, ""):
+        if required:
+            raise ApiError(f"Missing required query parameter '{name}'", code="missing_parameter")
+        return default
+    try:
+        value = cast(raw)
+    except (TypeError, ValueError):
+        raise ApiError(f"Parameter '{name}' must be a {'whole number' if cast is int else 'number'}",
+                       code="invalid_parameter") from None
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ApiError(f"Parameter '{name}' must be a finite number", code="invalid_parameter")
+    if (lo is not None and value < lo) or (hi is not None and value > hi):
+        raise ApiError(f"Parameter '{name}' must be between {lo} and {hi}", code="out_of_range")
+    return value
+
+
+# =============================================================================
+# Cache (bounded, thread-safe, keeps the last good copy for stale fallback)
+# =============================================================================
+class TTLCache:
+    def __init__(self, max_entries):
+        self._data = OrderedDict()
+        self._lock = threading.Lock()
+        self.max_entries = max_entries
+
+    def get(self, key):
+        """Return (value, age_seconds) or (None, None)."""
+        with self._lock:
+            item = self._data.get(key)
+            if item is None:
+                return None, None
+            self._data.move_to_end(key)
+            stored_at, value = item
+            return value, time.time() - stored_at
+
+    def put(self, key, value):
+        with self._lock:
+            self._data[key] = (time.time(), value)
+            self._data.move_to_end(key)
+            while len(self._data) > self.max_entries:
+                self._data.popitem(last=False)
+
+    def clear(self):
+        with self._lock:
+            self._data.clear()
+
+
+feed_cache = TTLCache(config.CACHE_MAX_ENTRIES)
+
+
+def cached_fetch(key, ttl, fetch):
+    """
+    Return (payload, cache_info). Fresh cache hits skip the upstream call.
+    If the upstream fails and a copy younger than STALE_MAX_AGE exists, that copy
+    is returned and explicitly marked stale; otherwise the UpstreamError propagates.
+    """
+    cached, age = feed_cache.get(key)
+    if cached is not None and age < ttl:
+        return cached, {"hit": True, "age_seconds": int(age), "stale": False, "warning": None}
+    try:
+        payload = fetch()
+    except UpstreamError as exc:
+        if cached is not None and age < config.STALE_MAX_AGE:
+            log.warning("Serving stale cache for %s after upstream failure: %s", key, exc)
+            return cached, {"hit": True, "age_seconds": int(age), "stale": True,
+                            "warning": f"USGS is currently unavailable ({exc}). Showing data from "
+                                       f"{int(age // 60)} min ago."}
+        raise
+    feed_cache.put(key, payload)
+    return payload, {"hit": False, "age_seconds": 0, "stale": False, "warning": None}
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
+def iso(dt):
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# =============================================================================
+# Static resources loaded once at startup
+# =============================================================================
+plate_segments = F.load_plate_segments(config.TECTONIC_FILE)
+bundle = ModelBundle(config.MODEL_FILE, config.SCALER_FILE, config.MODEL_META_FILE)
+
+
+def get_context_catalog():
+    """M>=4.5 events from the last 30 days: input for density features and hotspots."""
+    def fetch():
+        end = utc_now()
+        events, _ = usgs_client.fetch_events(end - timedelta(days=F.DENSITY_WINDOW_DAYS), end,
+                                             min_mag=F.CATALOG_MIN_MAG, limit=20000)
+        return {"events": events, "fetched_at": iso(end), "end_ms": int(end.timestamp() * 1000)}
+    return cached_fetch(("context",), config.CONTEXT_CACHE_TTL, fetch)
+
+
+def score_points(lats, lons, depths, ref_ms, context_events):
+    """Build model features for arbitrary points at reference time ref_ms and score them."""
+    cat_t = [e["time"] for e in context_events]
+    cat_lat = [e["latitude"] for e in context_events]
+    cat_lon = [e["longitude"] for e in context_events]
+    n = len(lats)
+    dens = F.causal_density(cat_t, cat_lat, cat_lon, [ref_ms] * n, lats, lons)
+    pdist = F.plate_distance_km(lats, lons, plate_segments)
+    X = F.build_feature_matrix(lats, lons, depths, dens, pdist)
+    return bundle.predict_proba(X), dens, pdist
+
+
+# =============================================================================
+# Routes
+# =============================================================================
+@app.route("/")
+@app.route("/dashboard-v2")
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
-@app.route('/api/predict')
-def predict_api():
-    try:
-        lat_raw = request.args.get('lat')
-        lng_raw = request.args.get('lon') or request.args.get('lng')
 
-        if lat_raw is None or lng_raw is None:
-            return jsonify({"error": "Missing required query parameters: 'lat' and 'lon' (or 'lng')"}), 400
+@app.route("/api/health")
+def health():
+    _, age = feed_cache.get(("context",))
+    ok = bundle.ready and len(plate_segments) > 0
+    return jsonify({
+        "status": "ok" if ok else "degraded",
+        "model_loaded": bundle.ready,
+        "model_error": bundle.load_error,
+        "plate_segments": int(len(plate_segments)),
+        "context_cache_age_seconds": None if age is None else int(age),
+        "time": iso(utc_now()),
+    })
 
-        lat = float(lat_raw)
-        lng = float(lng_raw)
 
-        if math.isnan(lat) or math.isinf(lat) or math.isnan(lng) or math.isinf(lng):
-            return jsonify({"error": "Latitude and longitude must be valid finite numbers"}), 400
-
-        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lng <= 180.0):
-            return jsonify({"error": "Latitude must be in [-90, 90] and longitude in [-180, 180]"}), 400
-
-        depth_raw = request.args.get('depth', '10')
-        depth = float(depth_raw) if depth_raw else 10.0
-        if math.isnan(depth) or math.isinf(depth) or depth < 0.0 or depth > 700.0:
-            return jsonify({"error": "Depth must be a finite number between 0 and 700 km"}), 400
-
-    except ValueError as ve:
-        return jsonify({"error": f"Invalid input format: {ve}"}), 400
-    except Exception as e:
-        return jsonify({"error": f"Invalid input: {e}"}), 400
-
-    if model.model is None or model.scaler is None:
-        return jsonify({
-            "error": "AI model is not loaded on this server. Please check model artifacts.",
-            "status": "degraded"
-        }), 503
-
-    return jsonify(model.predict(lat, lng, depth))
-
-@app.route('/api/earthquakes')
+@app.route("/api/earthquakes")
 def earthquakes():
-    try:
-        days_raw = request.args.get('days', '7')
-        try:
-            days = int(days_raw)
-            if days < 1 or days > 365:
-                return jsonify({"error": "Parameter 'days' must be an integer between 1 and 365"}), 400
-        except ValueError:
-            return jsonify({"error": "Parameter 'days' must be a valid integer"}), 400
+    days = parse_number("days", default=1, lo=1, hi=config.MAX_DAYS, cast=int)
+    min_mag = round(parse_number("min_mag", default=2.5, lo=-1.0, hi=10.0), 1)
 
-        min_mag_raw = request.args.get('min_mag', '2.5')
-        try:
-            min_mag = float(min_mag_raw)
-            if min_mag < -2.0 or min_mag > 10.0:
-                return jsonify({"error": "Parameter 'min_mag' must be a float between -2.0 and 10.0"}), 400
-        except ValueError:
-            return jsonify({"error": "Parameter 'min_mag' must be a valid float"}), 400
+    def fetch():
+        end = utc_now()
+        start = end - timedelta(days=days)
+        events, stats = usgs_client.fetch_events(start, end, min_mag=min_mag, limit=config.MAX_EVENTS)
+        truncated = len(events) >= config.MAX_EVENTS
+        total = usgs_client.count_events(start, end, min_mag=min_mag) if truncated else len(events)
+        return {"events": events, "count": len(events), "truncated": truncated, "total_available": total,
+                "query": {"days": days, "min_mag": min_mag, "start": iso(start), "end": iso(end),
+                          "limit": config.MAX_EVENTS},
+                "fetched_at": iso(end), **stats}
 
-        # Check Cache
-        cache_key = (days, min_mag)
-        now = time.time()
-        if cache_key in USGS_CACHE:
-            cached_time, cached_data = USGS_CACHE[cache_key]
-            if now - cached_time < USGS_CACHE_TTL:
-                return jsonify(cached_data)
+    payload, cache = cached_fetch(("feed", days, min_mag), config.FEED_CACHE_TTL, fetch)
+    return jsonify({**payload, "source": SOURCE_NAME, "cache": cache})
 
-        end_date = datetime.now(timezone.utc)
-        start_date = end_date - timedelta(days=days)
 
-        url = (
-            f"https://earthquake.usgs.gov/fdsnws/event/1/query?"
-            f"format=geojson&starttime={start_date.strftime('%Y-%m-%d')}"
-            f"&endtime={end_date.strftime('%Y-%m-%d')}"
-            f"&minmagnitude={min_mag}&limit=300"
-        )
-        res = requests.get(url, timeout=15)
-        res.raise_for_status()
-        data = res.json()
-
-        features = data.get('features', [])
-        if features:
-            coords_list = []
-            valid_indices = []
-
-            for i, f in enumerate(features):
-                geom = f.get('geometry') or {}
-                coords = geom.get('coordinates') or []
-                props = f.get('properties') or {}
-
-                lon = float(coords[0]) if len(coords) > 0 and coords[0] is not None else 0.0
-                lat = float(coords[1]) if len(coords) > 1 and coords[1] is not None else 0.0
-                depth = float(coords[2]) if len(coords) > 2 and coords[2] is not None else 10.0
-
-                # Ensure depth is stored in props for frontend display
-                props['depth'] = depth
-                coords_list.append([lon, lat, depth])
-                valid_indices.append(i)
-
-            df = pd.DataFrame(coords_list, columns=['longitude', 'latitude', 'depth'])
-            df = model.compute_density(df, radius=1.0)
-            densities = df['local_density'].tolist()
-
-            has_model = (model.model is not None and model.scaler is not None)
-
-            for idx, feature_idx in enumerate(valid_indices):
-                feature = features[feature_idx]
-                props = feature['properties']
-                coords = coords_list[idx]
-
-                if has_model:
-                    pred = model.predict(lat=coords[1], lng=coords[0], depth=coords[2], live_density=densities[idx])
-                    props['prediction'] = pred.get('probability', 0.0)
-                else:
-                    props['prediction'] = None
-
-        # Store in cache
-        USGS_CACHE[cache_key] = (now, data)
-        return jsonify(data)
-
-    except requests.exceptions.Timeout:
-        return jsonify({"error": "USGS API request timed out. Please try again."}), 504
-    except requests.exceptions.RequestException as re:
-        return jsonify({"error": f"Failed to fetch data from USGS: {re}"}), 502
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/hotspots')
+@app.route("/api/hotspots")
 def hotspots():
-    zones = [
-        (36.1, -120.2), # San Andreas
-        (35.6, 140.1),  # Japan
-        (-33.4, -70.6), # Chile
-        (39.2, 40.0),   # Anatolian
-        (-3.0, 100.0),  # Sumatra
-        (41.9, 12.5),   # Italy
-        (-41.2, 174.7)  # New Zealand
-    ]
+    limit = parse_number("limit", default=12, lo=1, hi=50, cast=int)
+    ctx, cache = get_context_catalog()
+    events = ctx["events"]
 
-    has_model = (model.model is not None and model.scaler is not None)
-    results = []
+    cells = {}
+    for e in events:
+        key = (math.floor(e["latitude"] / HOTSPOT_CELL_DEG), math.floor(e["longitude"] / HOTSPOT_CELL_DEG))
+        cells.setdefault(key, []).append(e)
+    ranked = sorted((c for c in cells.items() if len(c[1]) >= HOTSPOT_MIN_EVENTS),
+                    key=lambda kv: (len(kv[1]), max((x["mag"] or 0) for x in kv[1])), reverse=True)[:limit]
 
-    for lat, lng in zones:
-        if has_model:
-            pred = model.predict(lat, lng, 10.0, live_density=5)
-            prob = pred.get("probability", 0.0)
-        else:
-            prob = 0.5  # Neutral fallback
-
-        results.append({
-            "latitude": lat,
-            "longitude": lng,
-            "probability": prob
+    spots = []
+    for (ci, cj), evs in ranked:
+        depths = [x["depth_km"] for x in evs if x["depth_km"] is not None]
+        mags = [x["mag"] for x in evs if x["mag"] is not None]
+        spots.append({
+            "latitude": round(float(np.mean([x["latitude"] for x in evs])), 3),
+            "longitude": round(float(np.mean([x["longitude"] for x in evs])), 3),
+            "cell": {"lat_min": ci * HOTSPOT_CELL_DEG, "lat_max": (ci + 1) * HOTSPOT_CELL_DEG,
+                     "lon_min": cj * HOTSPOT_CELL_DEG, "lon_max": (cj + 1) * HOTSPOT_CELL_DEG},
+            "event_count": len(evs),
+            "max_mag": max(mags) if mags else None,
+            "latest_time": max(x["time"] for x in evs),
+            "median_depth_km": round(float(np.median(depths)), 1) if depths else None,
+            "model_probability": None,
         })
 
+    if bundle.ready and spots:
+        ok = [s for s in spots if s["median_depth_km"] is not None]
+        if ok:
+            p, _, _ = score_points([s["latitude"] for s in ok], [s["longitude"] for s in ok],
+                                   [s["median_depth_km"] for s in ok], ctx["end_ms"], events)
+            for s, prob in zip(ok, p, strict=True):
+                s["model_probability"] = round(float(prob), 4)
+
     return jsonify({
-        "status": "success" if has_model else "degraded",
-        "hotspots": results
+        "hotspots": spots,
+        "definition": (f"{HOTSPOT_CELL_DEG:g} degree grid cells with the most M{F.CATALOG_MIN_MAG}+ events "
+                       f"recorded in the last {F.DENSITY_WINDOW_DAYS} days (observed activity, not a forecast)."),
+        "window_days": F.DENSITY_WINDOW_DAYS, "min_mag": F.CATALOG_MIN_MAG, "cell_deg": HOTSPOT_CELL_DEG,
+        "catalog_events": len(events), "model_status": "loaded" if bundle.ready else "unavailable",
+        "source": SOURCE_NAME, "fetched_at": ctx["fetched_at"], "cache": cache,
     })
 
-@app.route('/api/model-info')
+
+@app.route("/api/predict")
+def predict():
+    lat = parse_number("lat", lo=-90.0, hi=90.0, required=True, aliases=("latitude",))
+    lon = parse_number("lon", lo=-180.0, hi=180.0, required=True, aliases=("lng", "longitude"))
+    depth = parse_number("depth", default=10.0, lo=0.0, hi=700.0)
+
+    if not bundle.ready:
+        raise ApiError(bundle.load_error or "Model not loaded", status=503, code="model_unavailable")
+    try:
+        ctx, cache = get_context_catalog()
+    except UpstreamError as exc:
+        raise ApiError(f"Recent-activity feature unavailable because USGS could not be reached ({exc}). "
+                       "No score was computed.", status=503, code="context_unavailable") from exc
+
+    p, dens, pdist = score_points([lat], [lon], [depth], ctx["end_ms"], ctx["events"])
+    prob = float(p[0])
+    ratio, band = bundle.relative_band(prob)
+    return jsonify({
+        "probability": round(prob, 4),
+        "base_rate": bundle.base_rate,
+        "relative_to_base_rate": ratio,
+        "band": band,
+        "features": {
+            "latitude": lat, "longitude": lon, "depth_km": depth,
+            "local_density_30d": int(dens[0]), "plate_distance_km": round(float(pdist[0]), 1),
+        },
+        "interpretation": (f"If an M{F.CATALOG_MIN_MAG}+ earthquake were recorded at this point and depth, "
+                           f"the model's estimated chance that it would be M{F.SIGNIFICANT_MAG}+. "
+                           "This is not a probability that an earthquake will occur."),
+        "model": {"trained_at": bundle.meta.get("trained_at"),
+                  "test_roc_auc": bundle.meta.get("metrics", {}).get("test", {}).get("roc_auc")},
+        "context": {"fetched_at": ctx["fetched_at"], "stale": cache["stale"]},
+    })
+
+
+@app.route("/api/plates")
+def plates():
+    """Plate boundary polylines (static reference data, Mueller et al. compilation) for the map overlay."""
+    if not os.path.exists(config.TECTONIC_FILE):
+        raise ApiError("Plate boundary data is not installed", status=404, code="plates_unavailable")
+    resp = send_file(config.TECTONIC_FILE, mimetype="application/json", max_age=86400)
+    return resp
+
+
+@app.route("/api/model-info")
 def model_info():
-    is_loaded = (model.model is not None and model.scaler is not None)
-    return jsonify({
-        "features": FEATURE_NAMES,
-        "model": "PyTorch Sequential NN",
-        "device": str(DEVICE),
-        "status": "loaded" if is_loaded else "unloaded",
-        "version": "v1.1",
-        "epochs": 60
-    })
+    return jsonify(bundle.describe())
 
-if __name__ == '__main__':
-    debug = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1', 'yes')
-    host = os.environ.get('FLASK_HOST', '127.0.0.1')
-    port = int(os.environ.get('FLASK_PORT', 5000))
-    app.run(debug=debug, host=host, port=port)
+
+if __name__ == "__main__":
+    app.run(host=config.HOST, port=config.PORT, debug=config.DEBUG, threaded=True)

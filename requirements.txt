@@ -1,9 +1,8 @@
-flask>=3.0.0,<3.2.0
+# Runtime dependencies for TerraWatcher (Python 3.12).
+flask>=3.1.0,<3.2.0
 pandas>=2.2.0,<2.4.0
-numpy>=2.0.0,<2.2.0
-requests>=2.31.0,<2.33.0
-torch>=2.4.0,<2.6.0
-scikit-learn>=1.6.0,<1.8.0
+numpy>=2.0.0,<2.3.0
+requests>=2.33.0,<3.0.0
+torch>=2.13.0,<2.15.0
+scikit-learn>=1.7.0,<1.8.0   # must match the version that pickled scaler.pkl
 joblib>=1.4.0,<1.6.0
-tqdm>=4.66.0,<4.68.0
-pytest>=8.0.0,<9.0.0

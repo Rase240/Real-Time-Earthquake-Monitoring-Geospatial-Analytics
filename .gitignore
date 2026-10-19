@@ -123,3 +123,6 @@ checkpoints/
 !data/tectonic_plates.geojson
 !earthquake_model_v1.pth
 !scaler.pkl
+
+# Learning-guide build intermediates (docs/build_guide.py)
+docs/build/

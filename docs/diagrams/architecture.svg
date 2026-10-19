@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 450" width="780" height="450" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#4a5a66"/></marker>
+    <style>
+      .t{font-size:12px;font-weight:600;fill:#1b2a35}
+      .s{font-size:10px;fill:#4a5a66}
+      .g{font-size:13px;font-weight:700}
+      .ln{stroke:#4a5a66;stroke-width:1.3;fill:none}
+      .box{fill:#fff;stroke:#b8c6cf;stroke-width:1}
+      .lbl{font-size:9.5px;fill:#4a5a66;font-style:italic}
+    </style>
+  </defs>
+  <!-- Browser -->
+  <rect x="16" y="16" width="230" height="292" rx="8" fill="#eaf6f4" stroke="#0e7d74" stroke-width="1.5"/>
+  <text x="30" y="38" class="g" fill="#0e7d74">Browser</text>
+  <rect x="30" y="50" width="202" height="44" rx="5" class="box"/><text x="40" y="68" class="t">templates/index.html</text><text x="40" y="84" class="s">markup · Leaflet + script tags</text>
+  <rect x="30" y="102" width="202" height="56" rx="5" class="box"/><text x="40" y="120" class="t">static/dashboard.js</text><text x="40" y="135" class="s">state · fetchJson + AbortController</text><text x="40" y="149" class="s">rendering · auto-refresh 3 min</text>
+  <rect x="30" y="166" width="202" height="44" rx="5" class="box"/><text x="40" y="184" class="t">static/core.js</text><text x="40" y="200" class="s">validation · statistics · formatting</text>
+  <rect x="30" y="218" width="202" height="76" rx="5" class="box"/><text x="40" y="236" class="t">Leaflet map</text><text x="40" y="252" class="s">observed events (canvas markers)</text><text x="40" y="266" class="s">activity clusters (rect + ring)</text><text x="40" y="280" class="s">plate boundaries (GeoJSON lines)</text>
+  <rect x="16" y="330" width="230" height="48" rx="8" fill="#fafbfc" stroke="#9aa9b3" stroke-dasharray="4 3"/>
+  <text x="30" y="350" class="t">Esri tile server · unpkg CDN</text><text x="30" y="366" class="s">basemap tiles · Leaflet JS/CSS (SRI)</text>
+  <line x1="131" y1="308" x2="131" y2="329" class="ln" marker-end="url(#a)"/>
+
+  <!-- Flask -->
+  <rect x="292" y="16" width="220" height="292" rx="8" fill="#eef2fb" stroke="#3b5bdb" stroke-width="1.5"/>
+  <text x="306" y="38" class="g" fill="#3b5bdb">Flask · app.py</text>
+  <rect x="306" y="50" width="192" height="56" rx="5" class="box"/><text x="316" y="68" class="t">Routes</text><text x="316" y="83" class="s">/ · /api/health · /api/plates</text><text x="316" y="97" class="s">/api/earthquakes · hotspots · predict</text>
+  <rect x="306" y="114" width="192" height="40" rx="5" class="box"/><text x="316" y="131" class="t">parse_number()</text><text x="316" y="146" class="s">validation → ApiError (400)</text>
+  <rect x="306" y="162" width="192" height="40" rx="5" class="box"/><text x="316" y="179" class="t">TTLCache · cached_fetch()</text><text x="316" y="194" class="s">TTL 60 s / 10 min · stale ≤ 30 min</text>
+  <rect x="306" y="210" width="192" height="40" rx="5" class="box"/><text x="316" y="227" class="t">score_points()</text><text x="316" y="242" class="s">build features → ModelBundle</text>
+  <rect x="306" y="258" width="192" height="40" rx="5" class="box"/><text x="316" y="275" class="t">Error handlers · headers</text><text x="316" y="290" class="s">JSON errors · CSP · nosniff</text>
+
+  <line x1="246" y1="112" x2="291" y2="112" class="ln" marker-end="url(#a)"/>
+  <line x1="292" y1="138" x2="247" y2="138" class="ln" marker-end="url(#a)" stroke-dasharray="4 3"/>
+  <text x="249" y="104" class="lbl" font-size="8.5px">GET /api</text><text x="254" y="152" class="lbl">JSON</text>
+
+  <!-- Right column -->
+  <rect x="556" y="16" width="208" height="56" rx="5" fill="#fff" stroke="#3b5bdb"/><text x="566" y="36" class="t">usgs_client.py</text><text x="566" y="52" class="s">timeouts · retry 429/5xx · validate</text><text x="566" y="65" class="s">normalise · de-duplicate</text>
+  <rect x="556" y="92" width="208" height="50" rx="12" fill="#fff6e5" stroke="#d08700"/><text x="566" y="112" class="t">USGS FDSN event service</text><text x="566" y="129" class="s">earthquake.usgs.gov (public, no key)</text>
+  <rect x="556" y="164" width="208" height="50" rx="5" fill="#fff" stroke="#3b5bdb"/><text x="566" y="184" class="t">features.py</text><text x="566" y="201" class="s">causal density · plate distance (km)</text>
+  <rect x="556" y="228" width="208" height="34" rx="5" fill="#fafbfc" stroke="#9aa9b3" stroke-dasharray="4 3"/><text x="566" y="249" class="s">data/tectonic_plates.geojson</text>
+  <rect x="556" y="282" width="208" height="50" rx="5" fill="#fff" stroke="#3b5bdb"/><text x="566" y="302" class="t">ml_model.py</text><text x="566" y="319" class="s">EarthquakeNN · ModelBundle</text>
+  <rect x="556" y="346" width="208" height="48" rx="5" fill="#fafbfc" stroke="#9aa9b3" stroke-dasharray="4 3"/><text x="566" y="366" class="s">earthquake_model_v1.pth · scaler.pkl</text><text x="566" y="382" class="s">model_meta.json</text>
+
+  <line x1="512" y1="44" x2="555" y2="44" class="ln" marker-end="url(#a)"/>
+  <line x1="660" y1="72" x2="660" y2="91" class="ln" marker-end="url(#a)"/>
+  <line x1="512" y1="228" x2="555" y2="192" class="ln" marker-end="url(#a)"/>
+  <line x1="660" y1="214" x2="660" y2="227" class="ln" marker-end="url(#a)"/>
+  <line x1="512" y1="236" x2="555" y2="300" class="ln" marker-end="url(#a)"/>
+  <line x1="660" y1="332" x2="660" y2="345" class="ln" marker-end="url(#a)"/>
+
+  <!-- Training -->
+  <rect x="292" y="330" width="220" height="74" rx="8" fill="#f3effc" stroke="#6d3fd1" stroke-width="1.5"/>
+  <text x="306" y="350" class="t" fill="#6d3fd1">train_model.py (offline, manual)</text>
+  <text x="306" y="366" class="s">uses usgs_client + features</text>
+  <text x="306" y="380" class="s">chronological split · train · evaluate</text>
+  <text x="306" y="394" class="s">writes artifacts + docs/model_evaluation.md</text>
+  <line x1="512" y1="370" x2="555" y2="370" class="ln" marker-end="url(#a)" stroke="#6d3fd1"/>
+  <text x="516" y="364" class="lbl">writes</text>
+  <text x="16" y="432" class="s">Solid arrows: runtime calls. Dashed boxes: static files or third-party services. No database, queue or background worker is used.</text>
+</svg>
