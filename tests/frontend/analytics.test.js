@@ -138,6 +138,14 @@ test('charts show an explicit empty state instead of an empty frame', () => {
   assert.match(CH.barChart({ bins: [{ label: 'a', count: 0 }] }), /No values/);
 });
 
+test('year axes label whole years without a thousands suffix', () => {
+  const svg = CH.lineChart({ x: { type: 'year' }, series: [{ name: 'd', kind: 'line', data: [2020, 2021, 2022, 2023, 2024, 2025].map((x) => ({ x, y: 1 })) }] });
+  const ticks = [...svg.matchAll(/class="tick" x="[^"]+" y="[^"]+" text-anchor="middle">([^<]+)</g)].map((t) => t[1]);
+  assert.ok(ticks.includes('2020') && ticks.includes('2025'));
+  assert.ok(ticks.every((t) => /^\d{4}$/.test(t)), ticks.join(','));
+  assert.match(CH.lineChart({ series: [{ name: 'd', kind: 'line', data: [{ x: 2020, y: 1 }, { x: 2021, y: 1 }] }] }), />2k</);
+});
+
 test('log axes skip non-positive values', () => {
   const svg = CH.lineChart({ x: { type: 'log' }, y: { log: true }, series: [{ name: 'r', kind: 'dot', data: [{ x: 0, y: 1 }, { x: 0.1, y: 0 }, { x: 1, y: 10 }] }] });
   assert.equal((svg.match(/class="dot"/g) || []).length, 1);

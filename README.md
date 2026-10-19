@@ -21,7 +21,8 @@ files. A **Live Monitor** keeps the original event feed, map and point analysis.
 > describes what was observed, usually an ongoing sequence, and is not a warning. For alerts, use
 > official agencies (USGS, national geological surveys, tsunami warning centres).
 
-📘 **Learning guide:** [`docs/learning-guide.pdf`](docs/learning-guide.pdf) (source:
+📘 **Interview-preparation guide:** [`docs/learning-guide.pdf`](docs/learning-guide.pdf) (25 pages: one-page
+revision sheet, architecture, every model with its evaluation, decisions, failure cases, interview Q&A; source:
 [`docs/learning-guide.md`](docs/learning-guide.md)). **Evaluation report:**
 [`docs/ml_evaluation.md`](docs/ml_evaluation.md), generated from `models/*.json`.
 
@@ -47,6 +48,8 @@ files. A **Live Monitor** keeps the original event feed, map and point analysis.
 | Activity Forecasts | Anomaly Detection |
 |---|---|
 | ![Activity Forecasts](docs/images/forecast-view.png) | ![Anomaly Detection](docs/images/anomaly-view.png) |
+
+![Model Performance](docs/images/performance-view.png)
 
 Shared behaviour:
 
@@ -353,7 +356,7 @@ Only excess activity is tested. The design came from the null simulation:
 
 Five alternatives were compared on the same null runs and injection trials: an empirical null at the
 95th and 99th percentiles, the MLE floor with and without conditioning, and conditioning with the old
-floor (details in [docs/learning-guide.md](docs/learning-guide.md) §8.5). Declustering was not
+floor (details in [docs/learning-guide.md](docs/learning-guide.md) §6.2). Declustering was not
 evaluated, because it would remove the aftershock sequences this module mainly finds.
 
 Isolation Forest was not used: sparse, overdispersed counts need a count model with an explicit
@@ -482,8 +485,9 @@ were not added.
     the realistic figure is about 6–7 %, not 5.6 %.
   * The false-alert rate per cell test was 0.046 %. The rolling 2× rule's was 10.2 %.
   * Across all 12 threshold/window/reference settings the rate is below the previous test's. It is above
-    5 % in 7 of them, and in 4 (all M4.5) the whole 95 % interval is above 5 % (worst 8.1 %, 6.6–10.0 %,
-    with a 4-week window and 26-week reference).
+    5 % in 7 of them, and in 5 the whole 95 % interval is above 5 %: four at M4.5 (worst 8.1 %,
+    6.6–10.0 %, with a 4-week window and 26-week reference) and M5.0 with a 4-week window and 26-week
+    reference (6.5 %, 5.1–8.2 %).
   * Cause (separate stream, 2 000 runs per null): with each cell's simulated dispersion capped at its
     2001–2015 floor the rate is 1.7 %, and with the true dispersion 1.8 %. The test is calibrated when
     its dispersion is right; the excess comes from cells whose dispersion rose after 2015.
@@ -575,30 +579,30 @@ node --test "tests/frontend/*.test.js"
     data, covariance vs standard errors, predictive counts (Poisson limit, widening with parameter and
     count uncertainty, determinism) and recovery of the count dispersion;
   * the contract of every endpoint, including error codes, caching, truncation and model-unavailable behaviour.
-* **Frontend coverage** (26 tests): feed validation and statistics, validation of every analytical
+* **Frontend coverage** (27 tests): feed validation and statistics, validation of every analytical
   response, superseded requests, sequence-layer highlighting, explanation texts, comparison rules, and
-  SVG chart output (accessibility, empty states, log axes).
+  SVG chart output (accessibility, empty states, log axes, whole-year axis labels).
 
 ### Verification performed (2026-10-19, Windows 11, Python 3.12.10, Node 24.18)
 
 | Check | Result |
 |---|---|
 | `python -m pytest -q` | 217 passed |
-| `node --test "tests/frontend/*.test.js"` | 26 passed |
+| `node --test "tests/frontend/*.test.js"` | 27 passed |
 | `ruff check .` (ruff 0.17.1, now pinned in `requirements-dev.txt`; config in `ruff.toml`) | no findings |
-| `pip-audit --path .venv/Lib/site-packages` (pip-audit in a separate throwaway venv) | no known vulnerabilities in the project's dependencies; 6 advisories in the venv's own installer, pip 25.0.1 (fixed in pip ≥ 26.2; upgrade with `python -m pip install --upgrade pip`) |
-| `python docs/build_guide.py` | all source excerpts verified verbatim; PDF rebuilt |
+| `pip-audit --path .venv/Lib/site-packages` (pip-audit in a separate throwaway venv) | no known vulnerabilities, after upgrading the venv's own installer from pip 25.0.1 (which had advisories fixed in pip ≥ 26.2) to 26.2.1 with `python -m pip install --upgrade pip` |
+| `python docs/build_guide.py` | all 8 source excerpts verified verbatim; 25-page PDF rebuilt; every number checked against `models/*.json`, `model_meta.json` or a dated live API response |
 | Reproduction before changes | all five committed `models/*.json` reproduced exactly from the code and catalogue |
 | `python ml_pipeline.py all` after the changes, run twice | identical artifacts apart from timestamps; forecast `.joblib` files and `anomaly_reference.json` unchanged from before |
 | Live server against real USGS | 131 forecasts (M4.5) with the new intervals, 144 cells tested (2 elevated), 60 sequences in 30 days of M2.5+ |
-| Browser (in-app Chromium, desktop size) | Model Performance renders every new block (skill intervals, model-implied coverage, false-alert diagnosis, clustering alternatives, aftershock predictive coverage) without console errors; Sequence Explorer runs on the live feed. |
+| Browser (in-app Chromium, desktop size) | Model Performance renders every new block (skill intervals, model-implied coverage, false-alert diagnosis, clustering alternatives, aftershock predictive coverage) without console errors; Sequence Explorer runs on the live feed; the test-year chart labels its axis 2020 … 2026. |
+| Browser at 375×812 (in-app Chromium, device emulation) | all six views: page width equals the viewport (no horizontal scroll; wide tables scroll inside their cards), no console errors |
+| Screenshots | `docs/images/dashboard-desktop.png`, `forecast-view.png`, `anomaly-view.png` and the new `performance-view.png` retaken at 1440×900 with headless Chrome against live data |
 
-Not re-verified after these changes: the mobile layout, the empty-model-directory states, the anomaly →
-aftershock hand-offs, and the screenshots in `docs/images/` (taken before; the views they show have not
-changed visually except the Model Performance tables). Also not verified: sustained USGS rate limiting
-(simulated only), memory under long uptime, browsers other than Chromium, and screen-reader behaviour
-beyond ARIA roles and labels. Known display bug: the "Test deviance by year" chart labels its year
-axis "2k" instead of the year.
+Not re-verified after these changes: the empty-model-directory states and the anomaly → aftershock
+hand-offs. The three older JPEG screenshots (event detail, point analysis, feed error) show Live Monitor
+features that did not change. Also not verified: sustained USGS rate limiting (simulated only), memory
+under long uptime, browsers other than Chromium, and screen-reader behaviour beyond ARIA roles and labels.
 
 ## Troubleshooting
 

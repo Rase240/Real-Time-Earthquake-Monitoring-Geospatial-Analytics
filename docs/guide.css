@@ -1,4 +1,4 @@
-/* Print stylesheet for the TerraWatcher learning guide (rendered by headless Chrome). */
+/* Print stylesheet for the TerraWatcher interview-preparation guide (rendered by headless Chrome). */
 @page { size: A4; margin: 20mm 17mm 18mm 17mm; }
 @page :first { margin: 0; }
 
@@ -56,7 +56,7 @@ body {
 /* ---------- Headings ---------- */
 h1, h2, h3, h4 { line-height: 1.25; break-after: avoid; page-break-after: avoid; }
 main h1 {
-  page-break-before: always; font-size: 22pt; margin: 0 0 6mm; padding-bottom: 3mm;
+  font-size: 20pt; margin: 9mm 0 5mm; padding-bottom: 2.5mm;
   border-bottom: 2px solid var(--accent); letter-spacing: -0.01em;
 }
 h2 { font-size: 14pt; margin: 7mm 0 2.5mm; color: #12303b; }
@@ -113,3 +113,15 @@ figcaption b { color: var(--ink); }
 .page-break { page-break-after: always; }
 .kbd { font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.4pt; }
 .checklist li { list-style: "☐  "; }
+
+/* ---------- Interview guide additions ---------- */
+.eq {
+  font-family: "Cambria Math", Cambria, "Times New Roman", serif; font-size: 10.6pt; text-align: center;
+  background: var(--soft); border-radius: 3px; padding: 2mm 3mm; margin: 1mm 0 3.5mm; break-inside: avoid;
+}
+.sheet { font-size: 8.15pt; line-height: 1.36; column-count: 2; column-gap: 7mm; }
+.sheet p { margin: 0 0 1.9mm; break-inside: avoid; }
+.sheet strong { color: var(--accent); }
+.src-block { break-inside: avoid; page-break-inside: avoid; }
+main h1.pb { page-break-before: always; margin-top: 0; }
+main > h1:first-child { margin-top: 0; }

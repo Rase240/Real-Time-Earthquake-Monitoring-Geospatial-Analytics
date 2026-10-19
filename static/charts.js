@@ -64,7 +64,7 @@
   }
 
   /**
-   * Line/step/dot/bar series on numeric, time or logarithmic x axes, plus optional
+   * Line/step/dot/bar series on numeric, time, year (integer ticks, no “k”) or logarithmic x axes, plus optional
    * interval bands and point markers with error bars.
    */
   function lineChart(opts) {
@@ -98,10 +98,11 @@
       parts.push(`<line class="grid" x1="${m.left}" x2="${W - m.right}" y1="${y}" y2="${y}"/>`);
       parts.push(`<text class="tick" x="${m.left - 6}" y="${y}" text-anchor="end" dominant-baseline="middle">${esc(formatNum(v))}</text>`);
     });
-    const xt = xType === 'log' ? logTicks(x0, x1) : niceTicks(x0, x1, xType === 'time' ? 5 : 6);
+    let xt = xType === 'log' ? logTicks(x0, x1) : niceTicks(x0, x1, xType === 'time' ? 5 : 6);
+    if (xType === 'year') xt = xt.filter(Number.isInteger);
     xt.forEach((v) => {
       const x = X(v).toFixed(1);
-      const label = xType === 'time' ? formatTime(v, x1 - x0) : formatNum(v);
+      const label = xType === 'time' ? formatTime(v, x1 - x0) : xType === 'year' ? String(v) : formatNum(v);
       parts.push(`<line class="axis" x1="${x}" x2="${x}" y1="${H - m.bottom}" y2="${H - m.bottom + 4}"/>`);
       parts.push(`<text class="tick" x="${x}" y="${H - m.bottom + 16}" text-anchor="middle">${esc(label)}</text>`);
     });

@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 440" width="800" height="440" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#4a5a66"/></marker>
+    <style>
+      .band{fill:#f4f8fa;stroke:#c9d5dc;stroke-width:1}
+      .bl{font-size:10px;font-weight:700;letter-spacing:.08em;fill:#0e7d74}
+      .box{fill:#fff;stroke:#9fb1bc;stroke-width:1;rx:5}
+      .hot{fill:#e3f3f1;stroke:#0e7d74;stroke-width:1;rx:5}
+      .art{fill:#f3effc;stroke:#6d3fd1;stroke-width:1;rx:5}
+      .t{font-size:11.5px;font-weight:600;fill:#1b2a35}
+      .s{font-size:10.5px;fill:#3b4a55}
+      .ln{stroke:#4a5a66;stroke-width:1.2;fill:none}
+    </style>
+  </defs>
+
+  <!-- Offline band -->
+  <rect class="band" x="8" y="8" width="784" height="190" rx="6"/>
+  <text class="bl" x="20" y="26">OFFLINE · python ml_pipeline.py (run by hand, never by the web app)</text>
+
+  <rect class="box" x="20" y="40" width="170" height="104"/>
+  <text class="t" x="30" y="60">USGS catalogue</text>
+  <text class="s" x="30" y="78">2000 → 2026-10-19, M4.5+</text>
+  <text class="s" x="30" y="94">187 784 events, 82 chunks</text>
+  <text class="s" x="30" y="110">no gaps (failed chunk</text>
+  <text class="s" x="30" y="126">aborts the download)</text>
+
+  <rect class="box" x="214" y="40" width="150" height="104"/>
+  <text class="t" x="224" y="60">Weekly counts</text>
+  <text class="s" x="224" y="78">C[cell, week]</text>
+  <text class="s" x="224" y="94">648 cells of 10° × 10°</text>
+  <text class="s" x="224" y="110">M ≥ 4.5 and M ≥ 5.0</text>
+  <text class="s" x="224" y="126">Monday-aligned weeks</text>
+  <path class="ln" d="M190 92 H210" marker-end="url(#a)"/>
+
+  <rect class="hot" x="390" y="38" width="392" height="30"/>
+  <text class="t" x="400" y="57">B Forecast</text>
+  <text class="s" x="476" y="57">fit 2001–15 · select 2016–19 · walk-forward test 2020–26</text>
+  <rect class="hot" x="390" y="74" width="392" height="30"/>
+  <text class="t" x="400" y="93">C Anomaly</text>
+  <text class="s" x="476" y="93">per-cell α MLE 2001–15 · null simulation · injection</text>
+  <rect class="hot" x="390" y="110" width="392" height="30"/>
+  <text class="t" x="400" y="129">A Sequences</text>
+  <text class="s" x="476" y="129">synthetic labelled scenarios + real M7.5+ split check</text>
+  <rect class="hot" x="390" y="146" width="392" height="30"/>
+  <text class="t" x="400" y="165">D Aftershocks</text>
+  <text class="s" x="476" y="165">Omori–Utsu on 356 M7+ sequences · 30 → 90 d check</text>
+  <path class="ln" d="M364 70 H386" marker-end="url(#a)"/>
+  <path class="ln" d="M364 98 H386" marker-end="url(#a)"/>
+  <path class="ln" d="M105 144 V184 H372 V161 H386" marker-end="url(#a)"/>
+  <path class="ln" d="M372 161 V125 H386" marker-end="url(#a)"/>
+
+  <!-- Artifacts -->
+  <rect class="art" x="250" y="206" width="300" height="34"/>
+  <text class="t" x="262" y="222">models/ — committed JSON + joblib</text>
+  <text class="s" x="262" y="235">version, features, sklearn and regions checked at load</text>
+  <path class="ln" d="M400 198 V204" marker-end="url(#a)"/>
+  <path class="ln" d="M400 240 V250" marker-end="url(#a)"/>
+
+  <!-- Online band -->
+  <rect class="band" x="8" y="252" width="784" height="180" rx="6"/>
+  <text class="bl" x="20" y="270">ONLINE · python app.py (one Flask process; nothing is trained per request)</text>
+
+  <rect class="box" x="20" y="280" width="190" height="30"/>
+  <text class="s" x="30" y="299">USGS feed, last 1–30 days, any M</text>
+  <rect class="box" x="250" y="280" width="330" height="30"/>
+  <text class="s" x="260" y="299">DBSCAN on Earth-centred chord + scaled time</text>
+  <rect class="hot" x="620" y="280" width="162" height="30"/>
+  <text class="t" x="632" y="299">/api/sequences</text>
+  <path class="ln" d="M210 295 H246" marker-end="url(#a)"/>
+  <path class="ln" d="M580 295 H616" marker-end="url(#a)"/>
+
+  <rect class="box" x="20" y="318" width="190" height="66"/>
+  <text class="s" x="30" y="340">USGS history, 400 days,</text>
+  <text class="s" x="30" y="356">global M4.5+ (1 h cache)</text>
+  <text class="s" x="30" y="372">→ live weekly matrices</text>
+  <rect class="box" x="250" y="318" width="330" height="30"/>
+  <text class="s" x="260" y="337">9 causal features → GBM / GLM mean → NB α(μ) interval</text>
+  <rect class="hot" x="620" y="318" width="162" height="30"/>
+  <text class="t" x="632" y="337">/api/forecast</text>
+  <rect class="box" x="250" y="354" width="330" height="30"/>
+  <text class="s" x="260" y="373">conditional beta-binomial p → Benjamini–Hochberg q</text>
+  <rect class="hot" x="620" y="354" width="162" height="30"/>
+  <text class="t" x="632" y="373">/api/anomalies</text>
+  <path class="ln" d="M210 333 H246" marker-end="url(#a)"/>
+  <path class="ln" d="M210 369 H246" marker-end="url(#a)"/>
+  <path class="ln" d="M580 333 H616" marker-end="url(#a)"/>
+  <path class="ln" d="M580 369 H616" marker-end="url(#a)"/>
+
+  <rect class="box" x="20" y="392" width="190" height="30"/>
+  <text class="s" x="30" y="411">event lookup + radius query</text>
+  <rect class="box" x="250" y="392" width="330" height="30"/>
+  <text class="s" x="260" y="411">Omori–Utsu MLE, shown only if 5 checks pass</text>
+  <rect class="hot" x="620" y="392" width="162" height="30"/>
+  <text class="t" x="632" y="411">/api/aftershocks</text>
+  <path class="ln" d="M210 407 H246" marker-end="url(#a)"/>
+  <path class="ln" d="M580 407 H616" marker-end="url(#a)"/>
+</svg>
