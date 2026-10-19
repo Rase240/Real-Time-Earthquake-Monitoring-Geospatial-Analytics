@@ -1,0 +1,6 @@
+# Lint configuration (ruff is a development tool, not a runtime dependency).
+line-length = 130
+extend-exclude = ["docs/build"]
+
+[lint]
+select = ["E", "F", "W", "B"]

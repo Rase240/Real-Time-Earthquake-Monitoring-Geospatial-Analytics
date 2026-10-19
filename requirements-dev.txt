@@ -1,3 +1,4 @@
-# Test tooling (in addition to the runtime dependencies).
+# Test and lint tooling (in addition to the runtime dependencies). Not needed to run the app.
 -r requirements.txt
 pytest>=9.0.3,<10.0.0
+ruff>=0.17.1,<0.18.0          # `ruff check .`; configuration in ruff.toml

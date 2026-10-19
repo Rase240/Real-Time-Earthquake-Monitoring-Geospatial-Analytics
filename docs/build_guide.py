@@ -1,5 +1,5 @@
 """
-Build docs/learning-guide.pdf from docs/learning-guide.md.
+Build docs/learning-guide.pdf (the interview-preparation guide) from docs/learning-guide.md.
 
     pip install -r requirements-docs.txt
     python docs/build_guide.py            # writes docs/learning-guide.pdf
@@ -33,7 +33,7 @@ ROOT = DOCS.parent
 SRC_MD = DOCS / "learning-guide.md"
 OUT_PDF = DOCS / "learning-guide.pdf"
 BUILD = DOCS / "build"
-TITLE = "TerraWatcher — Real-Time Earthquake Analytics & Geospatial Intelligence"
+TITLE = "TerraWatcher — Seismic Analytics on the USGS Earthquake Catalogue"
 
 SRC_RE = re.compile(r"<!-- src: (?P<path>[^ ]+) -->\n```(?P<lang>\w*)\n(?P<code>.*?)\n```", re.S)
 
@@ -82,7 +82,9 @@ def slug(value, sep="-"):
 def to_html(text, toc_pages=None):
     # Code-source labels.
     def label(m):
-        return f'<div class="src-label">{html.escape(m["path"])}</div>\n\n```{m["lang"]}\n{m["code"]}\n```'
+        # Wrapped so the label never ends a page without its code.
+        return (f'<div class="src-block" markdown="1">\n<div class="src-label">{html.escape(m["path"])}</div>\n\n'
+                f'```{m["lang"]}\n{m["code"]}\n```\n\n</div>')
     text = SRC_RE.sub(label, text)
     md = markdown.Markdown(
         extensions=["extra", "codehilite", "toc", "sane_lists", "smarty"],
@@ -122,18 +124,20 @@ def page_html(body, toc):
 <section class="cover">
   <div class="cover-grid"></div>
   <div class="cover-inner">
-    <div class="cover-kicker">Technical learning guide</div>
+    <div class="cover-kicker">Interview preparation guide</div>
     <h1 class="cover-title">TerraWatcher</h1>
-    <div class="cover-sub">Real-Time Earthquake Analytics &amp; Geospatial Intelligence</div>
+    <div class="cover-sub">Seismic analytics on the USGS earthquake catalogue</div>
     <img class="cover-img" src="{(DOCS / 'images' / 'dashboard-desktop.png').as_uri()}" alt="TerraWatcher dashboard">
     <div class="cover-meta">
-      Architecture · Data pipeline · Geospatial concepts · Machine learning · Scientific validity ·
-      Deployment · Testing · Interview preparation
+      Quick revision sheet · Architecture and data flow · Forecasting · Anomaly detection · Aftershocks ·
+      Clustering · Evaluation · Decisions and failure cases · Interview questions · Future work
     </div>
-    <div class="cover-foot">Written against the repository state of 19 October 2026 · Flask · Leaflet · PyTorch · USGS FDSN</div>
+    <div class="cover-foot">Every number is read from the repository's evaluation artifacts (19 October 2026) ·
+      Flask · Leaflet · scikit-learn · SciPy · PyTorch · USGS FDSN</div>
   </div>
 </section>"""
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{html.escape(TITLE)} — Learning Guide</title>
+    title = html.escape(TITLE + " — Interview Preparation Guide")
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{title}</title>
 <style>{css}</style></head><body>{cover}{toc}<main>{body}</main></body></html>"""
 
 
@@ -195,7 +199,7 @@ def finish(pdf_path, out_path, headings, pages):
         w, h = page.rect.width, page.rect.height
         current = next((name for start, name in reversed(chapters) if start <= n), "Contents")
         if n >= toc_start:
-            page.insert_text((48, 30), "TerraWatcher · Learning Guide", fontsize=7.5, fontname="helv", color=(0.42, 0.5, 0.56))
+            page.insert_text((48, 30), "TerraWatcher · Interview Guide", fontsize=7.5, fontname="helv", color=(0.42, 0.5, 0.56))
             label = current if len(current) < 70 else current[:67] + "…"
             tw = pymupdf.get_text_length(label, fontname="helv", fontsize=7.5)
             page.insert_text((w - 48 - tw, 30), label, fontsize=7.5, fontname="helv", color=(0.42, 0.5, 0.56))
@@ -207,9 +211,9 @@ def finish(pdf_path, out_path, headings, pages):
     for kind, hid, name in headings:
         outline.append([1 if kind == "chapter" else 2, name, pages[hid]])
     doc.set_toc(outline)
-    doc.set_metadata({"title": TITLE + " — Technical Learning Guide", "author": "TerraWatcher project",
-                      "subject": "Architecture, data pipeline, ML and evaluation of TerraWatcher",
-                      "keywords": "earthquake, USGS, Flask, Leaflet, PyTorch, geospatial"})
+    doc.set_metadata({"title": TITLE + " — Interview Preparation Guide", "author": "TerraWatcher project",
+                      "subject": "Interview preparation: architecture, ML models, evaluation and limitations of TerraWatcher",
+                      "keywords": "earthquake, USGS, forecasting, anomaly detection, Omori-Utsu, DBSCAN, evaluation, interview"})
     doc.save(out_path, garbage=3, deflate=True)
     doc.close()
 
@@ -231,7 +235,8 @@ def previews(pdf_path, pages):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="only verify excerpts")
-    ap.add_argument("--preview", default="1,2,3,5,8,12,20,30,40", help="comma-separated pages to render as PNG")
+    ap.add_argument("--preview", default="1,2,3,4,5,7,9,11,13,15,17,19,21,23,25",
+                    help="comma-separated pages to render as PNG")
     args = ap.parse_args()
 
     text = SRC_MD.read_text(encoding="utf-8")

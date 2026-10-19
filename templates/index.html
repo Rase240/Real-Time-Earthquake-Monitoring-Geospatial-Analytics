@@ -4,25 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0a1219">
-  <meta name="description" content="TerraWatcher — real-time earthquake analytics and geospatial intelligence from the USGS event feed.">
-  <title>TerraWatcher — Earthquake Analytics</title>
+  <meta name="description" content="TerraWatcher — seismic analytics on the USGS event feed: live monitoring, sequence detection, seven-day regional count forecasts, elevated-activity detection and aftershock analysis.">
+  <title>TerraWatcher — Seismic Analytics</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%230a1219' stroke='%234fd1c5' stroke-width='2'/%3E%3Cpath d='M5 17h5l3-7 4 13 3-9 2 3h5' fill='none' stroke='%234fd1c5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+  <link rel="stylesheet" href="{{ asset('dashboard.css') }}">
 </head>
 <body>
-  <a class="skip-link" href="#event-list">Skip to event list</a>
+  <a class="skip-link" href="#workspace">Skip to content</a>
 
   <header class="topbar">
-    <button class="icon-btn only-mobile" id="controls-toggle" aria-controls="controls" aria-expanded="false" aria-label="Show filters and layers">
+    <button class="icon-btn only-mobile" id="controls-toggle" aria-controls="controls" aria-expanded="false" aria-label="Show controls and layers">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
     </button>
     <a class="brand" href="/" aria-label="TerraWatcher home">
       <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="13"/><path d="M5 17h5l3-7 4 13 3-9 2 3h5"/></svg></span>
-      <span class="brand-text"><strong>TerraWatcher</strong><small>Real-time earthquake analytics &amp; geospatial intelligence</small></span>
+      <span class="brand-text"><strong>TerraWatcher</strong><small>Seismic analytics on the USGS event catalogue</small></span>
     </a>
     <div class="topbar-status">
       <div class="status-pill" id="status-pill" data-state="loading" role="status"><span class="dot"></span><span id="status-text">Connecting…</span></div>
@@ -33,26 +33,40 @@
     </div>
   </header>
 
-  <div class="layout">
-    <aside class="panel controls" id="controls" aria-label="Filters and layers">
-      <section class="control-group">
-        <h2 class="kicker">Observation window</h2>
-        <div class="segmented" role="radiogroup" aria-label="Observation window">
-          <button role="radio" aria-checked="true" data-days="1">24 h</button>
-          <button role="radio" aria-checked="false" data-days="7">7 days</button>
-          <button role="radio" aria-checked="false" data-days="30">30 days</button>
-        </div>
-      </section>
-      <section class="control-group">
-        <label class="kicker" for="min-mag">Minimum magnitude</label>
-        <select id="min-mag">
-          <option value="0">All (M 0+)</option>
-          <option value="2.5" selected>M 2.5+</option>
-          <option value="4.5">M 4.5+</option>
-          <option value="6">M 6.0+</option>
-        </select>
-      </section>
-      <section class="control-group">
+  <nav class="viewbar" aria-label="Analysis modules">
+    <div class="tabs" role="tablist" aria-label="Analysis modules">
+      <button role="tab" id="tab-live" data-view="live" aria-selected="true" aria-controls="workspace">Live Monitor</button>
+      <button role="tab" id="tab-sequences" data-view="sequences" aria-selected="false" aria-controls="workspace" tabindex="-1">Sequence Explorer</button>
+      <button role="tab" id="tab-forecast" data-view="forecast" aria-selected="false" aria-controls="workspace" tabindex="-1">Activity Forecasts</button>
+      <button role="tab" id="tab-anomaly" data-view="anomaly" aria-selected="false" aria-controls="workspace" tabindex="-1">Anomaly Detection</button>
+      <button role="tab" id="tab-aftershock" data-view="aftershock" aria-selected="false" aria-controls="workspace" tabindex="-1">Aftershock Analysis</button>
+      <button role="tab" id="tab-performance" data-view="performance" aria-selected="false" aria-controls="workspace" tabindex="-1">Model Performance</button>
+    </div>
+  </nav>
+
+  <div class="layout" id="workspace" role="tabpanel" aria-labelledby="tab-live" data-active-view="live" tabindex="-1">
+    <aside class="panel controls" id="controls" aria-label="Controls and layers">
+      <!-- Shared feed controls: Live Monitor and Sequence Explorer use the same event feed. -->
+      <div data-pane="live sequences">
+        <section class="control-group">
+          <h2 class="kicker">Observation window</h2>
+          <div class="segmented" role="radiogroup" aria-label="Observation window">
+            <button role="radio" aria-checked="true" data-days="1">24 h</button>
+            <button role="radio" aria-checked="false" data-days="7">7 days</button>
+            <button role="radio" aria-checked="false" data-days="30">30 days</button>
+          </div>
+        </section>
+        <section class="control-group">
+          <label class="kicker" for="min-mag">Minimum magnitude</label>
+          <select id="min-mag">
+            <option value="0">All (M 0+)</option>
+            <option value="2.5" selected>M 2.5+</option>
+            <option value="4.5">M 4.5+</option>
+            <option value="6">M 6.0+</option>
+          </select>
+        </section>
+      </div>
+      <section class="control-group" data-pane="live">
         <label class="kicker" for="depth-filter">Depth class</label>
         <select id="depth-filter">
           <option value="all" selected>All depths</option>
@@ -62,15 +76,64 @@
         </select>
         <p class="hint">Applied in the browser to the events already loaded.</p>
       </section>
-      <section class="control-group">
+
+      <form class="control-group form-grid" id="seq-form" data-pane="sequences" novalidate>
+        <h2 class="kicker">DBSCAN parameters</h2>
+        <label>Distance ε (km)<input id="seq-eps-km" type="number" min="5" max="500" step="1" value="50" required></label>
+        <label>Time ε (hours)<input id="seq-eps-hours" type="number" min="1" max="720" step="1" value="72" required></label>
+        <label>Min. events per core<input id="seq-min-samples" type="number" min="2" max="50" step="1" value="4" required></label>
+        <button class="btn" type="submit">Detect sequences</button>
+        <p class="hint">Uses the observation window and minimum magnitude above. Events are neighbours inside an ellipse of ε km by ε hours.</p>
+      </form>
+
+      <section class="control-group" data-pane="forecast">
+        <label class="kicker" for="fc-threshold">Magnitude threshold</label>
+        <select id="fc-threshold"><option value="4.5" selected>M 4.5+</option><option value="5.0">M 5.0+</option></select>
+        <p class="hint">Each threshold has its own trained, separately evaluated model.</p>
+      </section>
+
+      <form class="control-group form-grid" id="an-form" data-pane="anomaly">
+        <h2 class="kicker">Test definition</h2>
+        <label>Magnitude threshold<select id="an-threshold"><option value="4.5" selected>M 4.5+</option><option value="5.0">M 5.0+</option></select></label>
+        <label>Observation window<select id="an-window"><option value="1">1 week</option><option value="2">2 weeks</option><option value="4" selected>4 weeks</option></select></label>
+        <label>Reference period<select id="an-reference"><option value="26">26 weeks before</option><option value="52" selected>52 weeks before</option></select></label>
+        <label>False discovery rate<select id="an-fdr"><option value="0.01">1%</option><option value="0.05" selected>5%</option><option value="0.1">10%</option></select></label>
+        <button class="btn" type="submit">Run test</button>
+      </form>
+
+      <form class="control-group form-grid" id="as-form" data-pane="aftershock" novalidate>
+        <h2 class="kicker">Reference event</h2>
+        <label>USGS event id<input id="as-event" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="e.g. us7000abcd" required pattern="[A-Za-z0-9_\-]{2,40}"></label>
+        <label>Radius (km, blank = rupture-length rule)<input id="as-radius" type="number" min="5" max="1000" step="1" placeholder="auto"></label>
+        <div class="two">
+          <label>Days before<input id="as-pre" type="number" min="0" max="365" step="1" value="30"></label>
+          <label>Days after<input id="as-post" type="number" min="1" max="365" step="1" value="60"></label>
+        </div>
+        <label>Minimum magnitude<select id="as-minmag"><option value="2.5">M 2.5+</option><option value="3.0">M 3.0+</option><option value="3.5">M 3.5+</option><option value="4.0">M 4.0+</option><option value="4.5" selected>M 4.5+</option><option value="5.0">M 5.0+</option></select></label>
+        <div class="two">
+          <label>Min depth (km)<input id="as-min-depth" type="number" min="0" max="800" step="1" placeholder="—"></label>
+          <label>Max depth (km)<input id="as-max-depth" type="number" min="0" max="800" step="1" placeholder="—"></label>
+        </div>
+        <label>Exclude first hours from fit<input id="as-fit-start" type="number" min="0" max="72" step="0.5" value="6"></label>
+        <button class="btn" type="submit">Analyse</button>
+        <p class="hint">Pick an event in Live Monitor or a sequence in Sequence Explorer to fill this in.</p>
+      </form>
+
+      <section class="control-group" data-pane="performance">
+        <h2 class="kicker">About these numbers</h2>
+        <p class="small muted">Every metric is read from files written by <code>python ml_pipeline.py</code>. Validation metrics were used to choose models; final test metrics were not used for any choice.</p>
+      </section>
+
+      <section class="control-group" data-pane="live sequences forecast anomaly aftershock">
         <h2 class="kicker">Map layers</h2>
         <div class="toggles">
-          <button class="toggle" data-layer="events" aria-pressed="true"><span class="swatch swatch-event"></span>Observed events</button>
-          <button class="toggle" data-layer="clusters" aria-pressed="true"><span class="swatch swatch-cluster"></span>Activity clusters</button>
+          <button class="toggle" data-layer="events" data-pane="live" aria-pressed="true"><span class="swatch swatch-event"></span>Observed events</button>
+          <button class="toggle" data-layer="clusters" data-pane="live" aria-pressed="true"><span class="swatch swatch-cluster"></span>Activity cells (30 d)</button>
+          <button class="toggle" data-layer="module" data-pane="sequences forecast anomaly aftershock" aria-pressed="true"><span class="swatch swatch-module"></span><span id="module-layer-name">Module layer</span></button>
           <button class="toggle" data-layer="plates" aria-pressed="true"><span class="swatch swatch-plate"></span>Plate boundaries</button>
         </div>
       </section>
-      <section class="control-group legend" aria-label="Map legend">
+      <section class="control-group legend" aria-label="Map legend" data-pane="live">
         <h2 class="kicker">Magnitude</h2>
         <ul class="legend-list">
           <li><i style="--c:#4fd1c5;--s:7px"></i>&lt; 3</li>
@@ -79,7 +142,25 @@
           <li><i style="--c:#ff7a59;--s:13px"></i>5–5.9</li>
           <li><i style="--c:#ff4d6d;--s:15px"></i>6+</li>
         </ul>
-        <p class="hint">Marker size grows with magnitude. Activity clusters are 2° cells with the most M4.5+ events in the last 30 days.</p>
+        <p class="hint">Marker size grows with magnitude. Activity cells are 2° cells with the most M4.5+ events in the last 30 days.</p>
+      </section>
+      <section class="control-group legend" data-pane="forecast">
+        <h2 class="kicker">Expected events / 7 days</h2>
+        <div class="ramp" aria-hidden="true"></div>
+        <div class="ramp-labels"><span>0.05</span><span>0.5</span><span>5</span><span>20+</span></div>
+        <p class="hint">Only cells with enough training history are shown.</p>
+      </section>
+      <section class="control-group legend" data-pane="anomaly">
+        <h2 class="kicker">Status</h2>
+        <ul class="legend-list column">
+          <li><i class="sq" style="--c:#fbbf24"></i>Elevated observed activity</li>
+          <li><i class="sq dashed" style="--c:#8ea2b0"></i>Too little reference data / incomplete</li>
+        </ul>
+      </section>
+      <section class="control-group legend" data-pane="aftershock">
+        <h2 class="kicker">Time after reference event</h2>
+        <div class="ramp time" aria-hidden="true"></div>
+        <div class="ramp-labels"><span>early</span><span>late</span></div>
       </section>
       <section class="control-group source">
         <h2 class="kicker">Data source</h2>
@@ -89,24 +170,29 @@
     </aside>
 
     <main class="main">
-      <section class="metrics" aria-label="Summary of loaded events">
+      <section class="metrics" aria-label="Summary of loaded events" data-pane="live">
         <article class="metric"><span class="metric-label">Events shown</span><strong class="metric-value" id="m-count">—</strong><span class="metric-foot" id="m-count-foot">Loading</span></article>
         <article class="metric"><span class="metric-label">Strongest</span><strong class="metric-value" id="m-strongest">—</strong><span class="metric-foot" id="m-strongest-foot">—</span></article>
         <article class="metric"><span class="metric-label">Median depth</span><strong class="metric-value" id="m-depth">—</strong><span class="metric-foot" id="m-depth-foot">—</span></article>
         <article class="metric"><span class="metric-label">Tsunami flag</span><strong class="metric-value" id="m-tsunami">—</strong><span class="metric-foot">USGS <code>tsunami</code> field set</span></article>
       </section>
 
-      <section class="panel map-panel" aria-label="Earthquake map">
+      <section class="view-head" data-pane="sequences forecast anomaly aftershock" aria-live="polite">
+        <div><h1 id="view-title">—</h1><p class="small muted" id="view-subtitle"></p></div>
+        <div class="view-status" id="view-status"></div>
+      </section>
+
+      <section class="panel map-panel" aria-label="Earthquake map" data-pane="live sequences forecast anomaly aftershock">
         <div class="banner" id="feed-banner" hidden role="alert">
           <span id="feed-banner-text"></span>
           <button class="btn-small" id="feed-retry">Retry</button>
         </div>
-        <div id="map" role="region" aria-label="Interactive map. Click anywhere to open point analysis."></div>
+        <div id="map" role="region" aria-label="Interactive map"></div>
         <div class="map-loading" id="map-loading"><span class="spinner"></span>Loading events…</div>
-        <div class="map-hint">Click the map for a point analysis · <span id="map-view">—</span></div>
+        <div class="map-hint"><span id="map-hint-text">Click the map for a point analysis</span> · <span id="map-view">—</span></div>
       </section>
 
-      <section class="analytics">
+      <section class="analytics" data-pane="live">
         <article class="panel chart-card">
           <header><h2>Magnitude distribution</h2><span class="tag">Loaded events</span></header>
           <div class="bars" id="mag-chart"></div>
@@ -115,27 +201,35 @@
           <header><h2>Depth distribution</h2><span class="tag">Loaded events</span></header>
           <div class="bars" id="depth-chart"></div>
         </article>
-        <article class="panel chart-card model-card">
-          <header><h2>Severity model</h2><span class="tag" id="model-chip">Checking</span></header>
-          <div id="model-body"><p class="muted">Loading model metadata…</p></div>
-        </article>
       </section>
+
+      <section class="module-panel" id="seq-panel" data-pane="sequences" aria-live="polite"></section>
+      <section class="module-panel" id="fc-panel" data-pane="forecast" aria-live="polite"></section>
+      <section class="module-panel" id="an-panel" data-pane="anomaly" aria-live="polite"></section>
+      <section class="module-panel" id="as-panel" data-pane="aftershock" aria-live="polite"></section>
+      <section class="module-panel perf" id="perf-panel" data-pane="performance" aria-live="polite"></section>
     </main>
 
-    <aside class="panel inspector" aria-label="Event details and list">
-      <section class="detail" id="detail" aria-live="polite">
-        <p class="muted">Select an event on the map or in the list to see its details.</p>
-      </section>
-      <header class="list-head">
-        <h2>Recent events <span class="count" id="list-count">—</span></h2>
-        <span class="muted small">Newest first</span>
-      </header>
-      <div class="event-list" id="event-list" tabindex="-1"><div class="state"><span class="spinner"></span>Loading events…</div></div>
+    <aside class="panel inspector" aria-label="Details" data-pane="live sequences forecast anomaly aftershock">
+      <div class="pane-live" data-pane="live">
+        <section class="detail" id="detail" aria-live="polite">
+          <p class="muted">Select an event on the map or in the list to see its details.</p>
+        </section>
+        <header class="list-head">
+          <h2>Recent events <span class="count" id="list-count">—</span></h2>
+          <span class="muted small">Newest first</span>
+        </header>
+        <div class="event-list" id="event-list" tabindex="-1"><div class="state"><span class="spinner"></span>Loading events…</div></div>
+      </div>
+      <div class="pane-scroll" id="seq-inspector" data-pane="sequences" aria-live="polite"></div>
+      <div class="pane-scroll" id="fc-inspector" data-pane="forecast" aria-live="polite"></div>
+      <div class="pane-scroll" id="an-inspector" data-pane="anomaly" aria-live="polite"></div>
+      <div class="pane-scroll" id="as-inspector" data-pane="aftershock" aria-live="polite"></div>
     </aside>
   </div>
 
   <footer class="footer">
-    <span>TerraWatcher shows observed USGS earthquake data and exploratory model output. It is not an early-warning or forecasting service — consult official agencies for alerts.</span>
+    <span>TerraWatcher shows observed USGS data and statistical analyses of it. Forecasts are aggregate regional counts, not predictions of individual earthquakes; it is not an early-warning service — consult official agencies for alerts.</span>
     <span>Tiles © Esri · Plate boundaries: Mueller et al. (1987) via the bundled GeoJSON</span>
   </footer>
 
@@ -143,8 +237,8 @@
     <div class="modal-backdrop" data-close></div>
     <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="point-title">
       <button class="icon-btn modal-close" data-close aria-label="Close point analysis">×</button>
-      <h2 id="point-title">Point analysis</h2>
-      <p class="muted small">Conditional severity score: if an M4.5+ earthquake were recorded here, how likely would it be M5.0+? It is <strong>not</strong> a probability that an earthquake will occur.</p>
+      <h2 id="point-title">Point analysis (legacy severity classifier)</h2>
+      <p class="muted small">Conditional severity score: if an M4.5+ earthquake were recorded here, how likely would it be M5.0+? It is <strong>not</strong> a probability that an earthquake will occur, and its test ROC-AUC is only slightly above chance (see Model Performance).</p>
       <form class="point-form" id="point-form">
         <label>Latitude<input id="pt-lat" type="number" step="any" min="-90" max="90" required></label>
         <label>Longitude<input id="pt-lon" type="number" step="any" min="-180" max="180" required></label>
@@ -158,7 +252,10 @@
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="{{ url_for('static', filename='core.js') }}"></script>
-  <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+  <script src="{{ asset('core.js') }}"></script>
+  <script src="{{ asset('charts.js') }}"></script>
+  <script src="{{ asset('analytics.js') }}"></script>
+  <script src="{{ asset('dashboard.js') }}"></script>
+  <script src="{{ asset('ml.js') }}"></script>
 </body>
 </html>

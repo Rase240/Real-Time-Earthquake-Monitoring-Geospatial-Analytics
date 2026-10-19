@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 270" width="780" height="270" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <style>
+      .t{font-size:12px;font-weight:600;fill:#1b2a35}
+      .s{font-size:10px;fill:#4a5a66}
+      .tick{font-size:10px;fill:#4a5a66}
+      .ln{stroke:#4a5a66;stroke-width:1.2;fill:none}
+    </style>
+  </defs>
+  <!-- scale: x = 40 + (year - 2000) * 26.6 ; 2026.8 -> 753 -->
+  <text x="40" y="22" class="t">Weekly origins T (Mondays 00:00 UTC); target = count in [T, T + 7 d)</text>
+  <rect x="40" y="40" width="27" height="34" fill="#e5e9ec" stroke="#b8c6cf"/>
+  <text x="44" y="61" class="s">warm-up</text>
+  <rect x="67" y="40" width="399" height="34" fill="#dbeeed" stroke="#0e7d74"/>
+  <text x="74" y="56" class="t">train</text><text x="74" y="69" class="s">targets end ≤ 2016-01-04 · 783 origins · fit models</text>
+  <rect x="466" y="40" width="106" height="34" fill="#e6eafb" stroke="#3d55c4"/>
+  <text x="472" y="56" class="t">validation</text><text x="472" y="69" class="s">209 origins</text>
+  <rect x="572" y="40" width="181" height="34" fill="#fbe9ee" stroke="#b03a5b"/>
+  <text x="578" y="56" class="t">final test</text><text x="578" y="69" class="s">354 origins, walk-forward</text>
+  <line class="ln" x1="40" y1="82" x2="753" y2="82"/>
+  <g class="tick">
+    <text x="40" y="96" text-anchor="middle">2000</text><text x="173" y="96" text-anchor="middle">2005</text>
+    <text x="306" y="96" text-anchor="middle">2010</text><text x="439" y="96" text-anchor="middle">2015</text>
+    <text x="572" y="96" text-anchor="middle">2020</text><text x="705" y="96" text-anchor="middle">2025</text>
+  </g>
+  <text x="40" y="124" class="t">Validation chooses: model family and hyperparameters (lowest mean Poisson deviance) and NB dispersion α</text>
+  <text x="40" y="148" class="t">Walk-forward test: each year is predicted by models refit on every target that ended before it</text>
+  <g>
+    <rect x="40" y="160" width="532" height="12" fill="#dbeeed"/><rect x="572" y="160" width="27" height="12" fill="#fbe9ee" stroke="#b03a5b"/><text x="606" y="170" class="s">2020</text>
+    <rect x="40" y="176" width="559" height="12" fill="#dbeeed"/><rect x="599" y="176" width="27" height="12" fill="#fbe9ee" stroke="#b03a5b"/><text x="633" y="186" class="s">2021</text>
+    <rect x="40" y="192" width="586" height="12" fill="#dbeeed"/><rect x="626" y="192" width="27" height="12" fill="#fbe9ee" stroke="#b03a5b"/><text x="660" y="202" class="s">2022</text>
+    <text x="40" y="222" class="s">… and so on to 2026 (7 folds). Green = training data of the fold, red = the year it predicts. α and hyperparameters stay as chosen on validation.</text>
+  </g>
+  <text x="40" y="250" class="s">Served model: the selected configuration refit on all 1 346 origins (2001 → 2026-10-19); its expected quality is the walk-forward test result.</text>
+</svg>

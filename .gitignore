@@ -126,3 +126,6 @@ checkpoints/
 
 # Learning-guide build intermediates (docs/build_guide.py)
 docs/build/
+
+# Historical catalogue downloaded by ml_pipeline.py (regenerable, ~10 MB)
+data/history_catalog.json

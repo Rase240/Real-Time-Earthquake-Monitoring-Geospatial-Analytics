@@ -35,12 +35,15 @@ class FakeUSGS:
         self.query_payload = collection()
         self.count_payload = {"count": 0}
         self.error = None
+        self.handler = None      # optional callable(path, params) -> payload, for tests that need per-query answers
         self.calls = []
 
     def __call__(self, path, params, timeout=None, retries=None, session=None):
         self.calls.append((path, dict(params)))
         if self.error is not None:
             raise self.error
+        if self.handler is not None:
+            return copy.deepcopy(self.handler(path, dict(params)))
         return copy.deepcopy(self.query_payload if path == "query" else self.count_payload)
 
 
@@ -49,8 +52,10 @@ def fake_usgs(monkeypatch):
     fake = FakeUSGS()
     monkeypatch.setattr(usgs_client, "_get", fake)
     app_module.feed_cache.clear()
+    app_module.analysis_cache.clear()
     yield fake
     app_module.feed_cache.clear()
+    app_module.analysis_cache.clear()
 
 
 @pytest.fixture
