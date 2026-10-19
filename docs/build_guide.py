@@ -33,7 +33,7 @@ ROOT = DOCS.parent
 SRC_MD = DOCS / "learning-guide.md"
 OUT_PDF = DOCS / "learning-guide.pdf"
 BUILD = DOCS / "build"
-TITLE = "TerraWatcher — Real-Time Earthquake Analytics & Geospatial Intelligence"
+TITLE = "TerraWatcher — Seismic Analytics on the USGS Earthquake Catalogue"
 
 SRC_RE = re.compile(r"<!-- src: (?P<path>[^ ]+) -->\n```(?P<lang>\w*)\n(?P<code>.*?)\n```", re.S)
 
@@ -124,13 +124,14 @@ def page_html(body, toc):
   <div class="cover-inner">
     <div class="cover-kicker">Technical learning guide</div>
     <h1 class="cover-title">TerraWatcher</h1>
-    <div class="cover-sub">Real-Time Earthquake Analytics &amp; Geospatial Intelligence</div>
+    <div class="cover-sub">Seismic analytics on the USGS earthquake catalogue</div>
     <img class="cover-img" src="{(DOCS / 'images' / 'dashboard-desktop.png').as_uri()}" alt="TerraWatcher dashboard">
     <div class="cover-meta">
-      Architecture · Data pipeline · Geospatial concepts · Machine learning · Scientific validity ·
-      Deployment · Testing · Interview preparation
+      Architecture · Data pipeline · Geospatial concepts · Sequences · Forecasts · Anomalies · Aftershocks ·
+      Scientific validity · Deployment · Testing · Interview preparation
     </div>
-    <div class="cover-foot">Written against the repository state of 19 October 2026 · Flask · Leaflet · PyTorch · USGS FDSN</div>
+    <div class="cover-foot">Written against the repository state of 19 October 2026 ·
+      Flask · Leaflet · scikit-learn · SciPy · PyTorch · USGS FDSN</div>
   </div>
 </section>"""
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{html.escape(TITLE)} — Learning Guide</title>

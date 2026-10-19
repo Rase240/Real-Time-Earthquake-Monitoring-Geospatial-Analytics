@@ -9,25 +9,29 @@
 
 ## 1.1 What TerraWatcher does
 
-TerraWatcher is a web application. It downloads recent earthquake records from the United States
-Geological Survey (USGS), shows them on an interactive world map and summarises them with live
-statistics. It also includes a small machine-learning model whose output is shown alongside an honest
-account of how well (or how poorly) that model performs.
+TerraWatcher is a web application. It downloads earthquake records from the United States Geological
+Survey (USGS), shows them on an interactive world map and summarises them with live statistics. On top
+of that live layer it runs four analytical modules: sequence detection, seven-day regional count
+forecasts, elevated-activity detection and aftershock (Omori–Utsu) analysis. Each module is evaluated
+on data it was not built from, and its results are shown in a Model Performance view (Chapter 8). A
+small legacy classifier from the original project is kept for the point-analysis dialog (Chapter 7).
 
-In one sentence for an interviewer: *TerraWatcher is a Flask and Leaflet dashboard for real-time USGS
-earthquake data, with a validated data pipeline and an exploratory PyTorch model evaluated
-chronologically against baselines.*
+In one sentence for an interviewer: *TerraWatcher is a Flask and Leaflet seismic-analytics dashboard on
+live USGS data, with space-time clustering, walk-forward-evaluated count forecasts against baselines, a
+multiple-comparison-corrected anomaly test and maximum-likelihood aftershock fits, each with honest
+failure states.*
 
-The application has three layers, and keeping them apart is the most important idea in this guide:
+The application produces four kinds of output, and keeping them apart is the most important idea in this guide:
 
 | Layer | Example in TerraWatcher | Source of truth | Can it be wrong? |
 |---|---|---|---|
 | **Observed data** | "An M 5.2 earthquake occurred 71 km ESE of ʻOhonua, Tonga at 19:32 UTC" | USGS catalogue, passed through unchanged | Only if USGS revises it (records have a `status` of `automatic` or `reviewed`) |
 | **Derived statistics and patterns** | median depth, magnitude histogram, "63 M4.5+ events in this 2° cell in 30 days" | Computed by TerraWatcher from observed data | Only through bugs; the arithmetic is deterministic |
-| **Model estimates** | "If an M4.5+ event were recorded here, 28 % chance it is M5+" | `EarthquakeNN`, trained on past data | Yes, often. It is a statistical estimate with measured, limited skill |
+| **Statistical findings** | "This cell recorded 67 events against ~4.2 expected (q = 2.4 × 10⁻¹⁰)"; "these 86 events form one detected sequence" | Anomaly test and DBSCAN on observed data | Only through bugs or wrong assumptions; the assumptions are stated |
+| **Model estimates** | "11.3 events expected in this cell over the next 7 days (80 %: 1–26)"; "If an M4.5+ event were recorded here, 28 % chance it is M5+" | Forecast models and `EarthquakeNN`, trained on past data | Yes, often. They are statistical estimates with measured, limited skill |
 
-TerraWatcher has **no fourth layer**: there are no validated forecasts. Nothing in the application
-predicts that an earthquake will happen at a particular place or time.
+Nothing in the application predicts that an individual earthquake will happen at a particular place or
+time. The forecasts are aggregate weekly counts for 10° cells.
 
 ## 1.2 The problem it addresses
 
@@ -52,7 +56,7 @@ As an engineering project, it demonstrates several skills:
 
 * **Students and learners** exploring global seismicity and plate tectonics.
 * **Recruiters and interviewers** evaluating the project as a portfolio piece; the demo checklist in
-  Chapter 15 is written for them.
+  Chapter 16 is written for them.
 * **The developer** (you), who needs to explain, debug and extend the system.
 
 TerraWatcher is *not* intended for emergency decisions. The footer and every model output say so.
@@ -70,26 +74,32 @@ TerraWatcher is *not* intended for emergency decisions. The footer and every mod
 | Activity clusters: 2° cells with the most M4.5+ events in 30 days | `/api/hotspots` | Derived (historical pattern) |
 | Plate-boundary overlay | `/api/plates`, `loadPlates()` | Reference data |
 | Point analysis: conditional severity score at any coordinate | `/api/predict`, `scorePoint()` | Model estimate |
-| Model card with test metrics against baselines | `/api/model-info`, `renderModel()` | Model evaluation |
+| Legacy classifier metrics (now in Model Performance) | `/api/model-info`, `/api/model-performance` | Model evaluation |
 | Freshness labels (fresh / cached / stale), truncation notice, error banner with Retry | `renderFreshness()`, `loadFeed()` | System status |
-| Health endpoint | `/api/health` | System status |
+| Health endpoint with per-module readiness | `/api/health` | System status |
+| Sequence Explorer: DBSCAN sequences, statistics, members, parameters | `/api/sequences`, `ml.js` | Statistical finding |
+| Activity Forecasts: 7-day counts per 10° cell, intervals, baselines, backtest | `/api/forecast[/<cell>]` | Model estimate |
+| Anomaly Detection: elevated observed activity, p/q values, contributing events | `/api/anomalies[/<cell>]` | Statistical finding |
+| Aftershock Analysis: timeline, histograms, Omori–Utsu fit with diagnostics, comparison | `/api/aftershocks` | Statistics + model |
+| Model Performance: validation vs test metrics of every module | `/api/model-performance` | Model evaluation |
 
 ## 1.5 Technology stack and why each piece is used
 
 | Technology | Role | Why this choice |
 |---|---|---|
 | **Python 3.12** | Backend language | Mature scientific ecosystem; the project's venv uses 3.12.10. |
-| **Flask 3.1** | HTTP server and routing | Small and explicit. Six JSON routes and one HTML page do not need a larger framework. |
+| **Flask 3.1** | HTTP server and routing | Small and explicit. About a dozen JSON routes and one HTML page do not need a larger framework. |
 | **requests** | HTTP client for USGS | Simple API with timeouts; easy to replace with a fake in tests. |
 | **NumPy / pandas** | Vectorised feature computation, training data frames | Plate distance for thousands of points runs as array arithmetic instead of Python loops. |
 | **PyTorch** | The neural network | Already used by the original project; small models train in seconds on a CPU. |
-| **scikit-learn** | `StandardScaler`, logistic-regression baseline, metrics | The standard, well-tested implementations. |
+| **scikit-learn** | DBSCAN, Poisson GLM, Poisson gradient boosting, `StandardScaler`, metrics | The standard, well-tested implementations. |
+| **SciPy** | Negative-binomial and Poisson distributions, Omori–Utsu MLE (L-BFGS-B), KS and binomial tests | Already required by scikit-learn; now pinned explicitly because it is used directly. |
 | **Leaflet 1.9.4** | Interactive map | Lightweight, no API key, canvas rendering for thousands of markers. |
 | **Plain HTML/CSS/JS** | Frontend | No build step. Pure logic is isolated in `core.js` so it can be unit-tested with Node. |
 | **pytest / node:test** | Tests | pytest for Python; Node's built-in runner, so the frontend needs no npm dependencies. |
 
 Deliberately *absent*: a database, Redis, background workers, Docker and a frontend framework. Each
-would add operational weight without solving a problem the project has (see Chapter 11).
+would add operational weight without solving a problem the project has (see Chapter 12).
 
 ## 1.6 Monitoring, analysis, hotspots and forecasting
 
@@ -100,18 +110,24 @@ These four words are often blurred together. TerraWatcher keeps them separate:
    feed cache.
 2. **Historical analysis.** Describing past events, for example "most events this week were shallow".
    TerraWatcher does this for the loaded window only (at most 30 days).
-3. **Hotspot estimation.** TerraWatcher's "activity clusters" are a *count of recent observed events per
-   grid cell*. They show where activity *has been*, not where it *will be*. Recent activity does raise
-   short-term probabilities in some statistical models (aftershock clustering), but TerraWatcher does not
-   implement or validate any such model.
-4. **Scientifically validated forecasting.** This is not implemented. It would require a model that
-   issues probabilities for future time windows, tested prospectively against what actually happened
-   (Chapter 8 describes what that would involve).
+3. **Hotspot and anomaly analysis.** TerraWatcher's "activity cells" are a *count of recent observed
+   events per grid cell*. The anomaly module goes one step further and tests whether a cell's count is
+   unusual for that cell. Both describe where activity *has been*, not where it *will be*.
+4. **Forecasting.** The forecast module issues seven-day count forecasts for 10° cells and was evaluated
+   walk-forward against baselines on 2020–2026 (§8.4). That is a statistical forecast of aggregate
+   activity, with measured and modest skill. It is not a prediction of individual earthquakes, and it is
+   not a prospective test in the CSEP sense (Chapter 9 describes what that would involve).
 
 ## 1.7 What the application can and cannot claim
 
 **Can claim:**
 
+* Its M4.5 weekly count forecasts had 13.9 % lower mean Poisson deviance than the historical-mean
+  baseline on the 2020–2026 walk-forward test, and were better in every test year, but not in every cell
+  (§8.4).
+* Its sequence detector recovers known synthetic clusters, including across the antimeridian and near
+  the poles (§8.3). Its anomaly test keeps run-level false alerts near the nominal 5 % (5.6 % in
+  simulation), at the cost of low sensitivity (§8.5).
 * It displays USGS events with their reported coordinates, magnitudes, depths and times.
 * It reports when the data was fetched and whether a response came from cache or is stale.
 * Its model, *for events that have already been recorded at M ≥ 4.5*, separates M ≥ 5 events from
@@ -120,7 +136,8 @@ These four words are often blurred together. TerraWatcher keeps them separate:
 
 **Cannot claim:**
 
-* That any location is "at risk" of an earthquake on any time scale.
+* That any location is "at risk" of an earthquake on any time scale, or that a forecast or an elevated
+  flag anticipates a large earthquake.
 * That the model has practical predictive value. Its Brier skill over the base rate is +0.006, which is
   close to zero.
 * That empty areas of the map are safe. An empty map only means USGS recorded nothing above the chosen
@@ -128,11 +145,11 @@ These four words are often blurred together. TerraWatcher keeps them separate:
 
 ## 1.8 High-level architecture
 
-<figure><img src="diagrams/architecture.svg" alt="Architecture diagram"><figcaption><b>Figure 1.</b> Components that actually exist. The browser talks only to Flask (same origin), except for map tiles and the Leaflet library. Flask talks to USGS through <code>usgs_client.py</code>. The model and plate data are files loaded once at start-up. Training is an offline script run by hand.</figcaption></figure>
+<figure><img src="diagrams/architecture.svg" alt="Architecture diagram"><figcaption><b>Figure 1.</b> Components that actually exist. The browser talks only to Flask (same origin), except for map tiles and the Leaflet library. Flask talks to USGS through <code>usgs_client.py</code>. Models, evaluation files and plate data are loaded once at start-up. Training and evaluation are offline commands run by hand.</figcaption></figure>
 
 There is **one process** at runtime: `python app.py`. It serves the HTML page, the static JavaScript
-and CSS, and the JSON API. State lives in memory: the cache, the loaded model and the plate segments.
-Restarting the process clears the cache and reloads the artifacts.
+and CSS, and the JSON API. State lives in memory: the two caches, the loaded models and evaluation
+files, and the plate segments. Restarting the process clears the caches and reloads the artifacts.
 
 # 2 Repository structure
 
@@ -142,8 +159,15 @@ Restarting the process clears the cache and reloads the artifacts.
 .
 ├── app.py                    Flask application: routes, validation, cache, errors, headers
 ├── config.py                 Configuration constants + environment-variable overrides
-├── usgs_client.py            USGS FDSN client: HTTP, retry, validation, normalisation
-├── features.py               Feature definitions shared by training and serving
+├── usgs_client.py            USGS FDSN client: HTTP, retry, validation, normalisation, event lookup, radius search
+├── ml_pipeline.py            Offline CLI for the analytical modules (download/forecast/anomaly/sequences/aftershock/all)
+├── analytics/                The four analytical modules and their shared data layer (Chapter 8)
+│   ├── catalog.py, geo.py, regions.py, regional_features.py
+│   ├── sequences.py, forecast.py, forecast_training.py, anomaly.py, aftershock.py
+│   └── evaluation.py, report.py
+├── models/                   Forecast models, anomaly reference, evaluation results (generated, committed)
+├── ruff.toml                 Lint configuration (development only)
+├── features.py               Legacy classifier features, shared by training and serving
 ├── ml_model.py               EarthquakeNN + ModelBundle (artifact loading, inference)
 ├── train_model.py            Offline training and evaluation pipeline
 ├── earthquake_model_v1.pth   Trained PyTorch weights (state_dict)
@@ -159,15 +183,19 @@ Restarting the process clears the cache and reloads the artifacts.
 │   └── index.html            Dashboard markup (Jinja template, no server-side logic)
 ├── static/
 │   ├── core.js               Pure browser logic (validation, stats, formatting)
-│   ├── dashboard.js          State, networking, Leaflet layers, rendering
+│   ├── charts.js             Dependency-free SVG charts (pure, Node-tested)
+│   ├── analytics.js          Analytical-view helpers (pure, Node-tested)
+│   ├── ml.js                 The five analytical views
+│   ├── dashboard.js          Live Monitor: state, networking, Leaflet layers, rendering
 │   └── dashboard.css         Theme and responsive layout
-├── tests/                    pytest suites + tests/frontend/core.test.js
-└── docs/                     This guide, model evaluation, audit, diagrams, screenshots
+├── tests/                    pytest suites + tests/frontend/*.test.js
+└── docs/                     This guide, ml_evaluation.md, model evaluation, audit, diagrams, screenshots
 ```
 
 Not documented here because they are generated or environment-specific: `.venv/`, `__pycache__/`,
-`.pytest_cache/`, `docs/build/` (PDF build intermediates) and `data/training_catalog.csv` (the
-downloaded training catalogue, which is git-ignored and recreated by `train_model.py`).
+`.pytest_cache/`, `docs/build/` (PDF build intermediates), `data/training_catalog.csv` (the legacy
+classifier's catalogue, recreated by `train_model.py`) and `data/history_catalog.csv` + `.json` (the
+2000–2026 catalogue, recreated by `python ml_pipeline.py download`). All of these are git-ignored.
 
 ## 2.2 File-by-file reference
 
@@ -184,8 +212,11 @@ downloaded training catalogue, which is git-ignored and recreated by `train_mode
 | `static/dashboard.js` | Behaviour | User events, API JSON → DOM, Leaflet layers | `core.js`, Leaflet | browser |
 | `static/dashboard.css` | Presentation | — | — | browser |
 | `data/tectonic_plates.geojson` | Reference geometry | — | — | `features.load_plate_segments`, `/api/plates` |
-| `model_meta.json` | Contract between training and serving | written by training | — | `ModelBundle`, `/api/model-info`, UI model card |
+| `model_meta.json` | Contract between training and serving (legacy classifier) | written by training | — | `ModelBundle`, `/api/model-info`, Model Performance view |
 | `tests/conftest.py` | Fake USGS transport, fixtures | — | `usgs_client`, `app` | all API tests |
+| `analytics/*.py` | The analytical modules (Chapter 8) | events, count matrices → features, sequences, forecasts, tests, fits | `numpy`, `pandas`, `scipy`, `sklearn` | `app.py`, `ml_pipeline.py` |
+| `ml_pipeline.py` | Offline training and evaluation | `data/history_catalog.csv` → `models/*`, `docs/ml_evaluation.md` | `analytics` | run manually |
+| `static/ml.js` | The analytical views | API JSON → DOM, module map layer | `analytics.js`, `charts.js`, `dashboard.js` | browser |
 
 ## 2.3 How a request moves through the files
 
@@ -198,6 +229,13 @@ Two other flows reuse the same pieces:
   produces the probability.
 * **Activity clusters** (`/api/hotspots`): the same context catalogue is binned into 2° cells in
   `hotspots()`, and the busiest cells are scored with `score_points()`.
+* **Forecasts and anomalies** (`/api/forecast`, `/api/anomalies`): `get_history()` downloads 400 days of
+  global M4.5+ events through `cached_fetch` (1-hour TTL, single flight). The weekly count matrix is
+  built from it, and the result is memoised under `(module, parameters, fetched_at)`.
+* **Sequences** (`/api/sequences`): `get_feed()` (the same cached feed as `/api/earthquakes`) is passed to
+  `analytics.sequences.detect`.
+* **Aftershocks** (`/api/aftershocks`): `usgs_client.fetch_event` looks up the reference event, a
+  `circle=` query fetches the surroundings, and `analytics.aftershock.analyse` computes the statistics and the fit.
 
 # 3 Backend architecture
 
@@ -263,6 +301,17 @@ All endpoints accept only `GET`. Every error, from any endpoint, has the same JS
 ```
 
 The frontend shows `error` to the user. Programs and tests can branch on `code`.
+
+The analytical endpoints are summarised in §16.3 and their parameters in the README. Their error codes
+follow one pattern:
+
+* invalid or out-of-range parameters give 400 (`invalid_parameter` / `out_of_range`);
+* malformed region ids give 404 `unknown_region`;
+* cells without enough history give 404 `insufficient_history` or `no_activity`;
+* an unknown USGS event gives 404 `event_not_found`;
+* missing models give 503 `model_unavailable`;
+* a failed or truncated history download gives 503 `history_unavailable`, with the text "No result
+  was computed".
 
 ### GET /api/earthquakes
 
@@ -414,34 +463,43 @@ used are evicted first) and stores `(stored_at, value)`. `cached_fetch` adds the
 
 <!-- src: app.py -->
 ```python
+    stale_max = config.STALE_MAX_AGE if stale_max is None else stale_max
     cached, age = feed_cache.get(key)
     if cached is not None and age < ttl:
         return cached, {"hit": True, "age_seconds": int(age), "stale": False, "warning": None}
-    try:
-        payload = fetch()
-    except UpstreamError as exc:
-        if cached is not None and age < config.STALE_MAX_AGE:
-            log.warning("Serving stale cache for %s after upstream failure: %s", key, exc)
-            return cached, {"hit": True, "age_seconds": int(age), "stale": True,
-                            "warning": f"USGS is currently unavailable ({exc}). Showing data from "
-                                       f"{int(age // 60)} min ago."}
-        raise
-    feed_cache.put(key, payload)
+    with _lock_for(key):
+        cached, age = feed_cache.get(key)          # another request may have refreshed it meanwhile
+        if cached is not None and age < ttl:
+            return cached, {"hit": True, "age_seconds": int(age), "stale": False, "warning": None}
+        try:
+            payload = fetch()
+        except UpstreamError as exc:
+            if cached is not None and age < stale_max:
+                log.warning("Serving stale cache for %s after upstream failure: %s", key, exc)
+                return cached, {"hit": True, "age_seconds": int(age), "stale": True,
+                                "warning": f"USGS is currently unavailable ({exc}). Showing data from "
+                                           f"{int(age // 60)} min ago."}
+            raise
+        feed_cache.put(key, payload)
     return payload, {"hit": False, "age_seconds": 0, "stale": False, "warning": None}
 ```
 
-The design has three properties:
+The design has four properties:
 
-* **Fresh hits** (feed younger than 60 s, context younger than 10 min) never touch USGS. This protects
-  the upstream service from a dashboard left open in many tabs.
-* **Stale fallback.** If USGS fails, a copy up to 30 minutes old is served, but it is *labelled*: the
-  response has `cache.stale = true` and a human-readable warning, which the UI shows in an amber banner.
-  Old data is never presented as fresh.
+* **Fresh hits** (feed younger than 60 s, context younger than 10 min, the 400-day analytical history
+  younger than 1 h) never touch USGS. This protects the upstream service from a dashboard left open in many tabs.
+* **Stale fallback.** If USGS fails, a copy up to 30 minutes old (6 hours for the analytical history,
+  `stale_max`) is served, but it is *labelled*: the response has `cache.stale = true` and a
+  human-readable warning, which the UI shows. Old data is never presented as fresh.
 * **No fabrication.** With no usable copy, the error propagates and the user sees an error. The cache
   never invents an empty "success".
+* **Single flight.** `_lock_for(key)` gives every cache key its own lock, and the cache is checked again
+  after acquiring it. Ten simultaneous cold requests for the forecast therefore trigger one 400-day
+  USGS download, not ten.
 
-The lock protects the dictionary, not the fetch. Two simultaneous misses for the same key may both call
-USGS. That duplicate costs little at this scale, and it keeps the code free of per-key locking.
+Derived results (sequences, forecasts, anomaly tests, aftershock fits) go into a second bounded cache,
+`analysis_cache`, through `memoized(key, compute)`. Their keys contain every parameter *and* the
+`fetched_at` of the data they were computed from, so a result can never outlive or mix data versions.
 
 ## 3.7 Data-source client
 
@@ -480,7 +538,7 @@ Which failures are retried:
   can contain URLs or internal network details.
 
 `fetch_events()` builds the query with **full UTC timestamps**. This fixed a real defect: the original
-code sent dates only, which silently cut off the most recent day of data (see §13.6).
+code sent dates only, which silently cut off the most recent day of data (see §14.6).
 
 ## 3.8 Model loading and inference in the backend
 
@@ -512,7 +570,7 @@ response. HTML pages also get a Content-Security-Policy that allows scripts only
 CSP allows inline *styles* (`'unsafe-inline'` in `style-src`), because the dashboard sets bar widths and
 colours through `style` attributes. It does not allow inline *scripts*.
 
-Known limits (not fixed, documented in Chapter 11): the Werkzeug development server is not a production
+Known limits (not fixed, documented in Chapter 12): the Werkzeug development server is not a production
 server, there is no rate limiting of incoming requests, and the caches are per process.
 
 # 4 Frontend and user interface
@@ -525,13 +583,21 @@ The page is one Jinja template, `templates/index.html`, with no server-side logi
 1. **Leaflet 1.9.4 from unpkg**, with Subresource Integrity (`integrity="sha256-…"`). If the CDN served
    modified code, the browser would refuse to run it.
 2. **`static/core.js`**, which defines `window.TerraCore`: pure functions with no DOM access.
-3. **`static/dashboard.js`**, an IIFE that holds all state and behaviour.
+3. **`static/charts.js`** and **`static/analytics.js`** (`window.TerraCharts`, `window.TerraML`): pure
+   chart and view helpers.
+4. **`static/dashboard.js`**, an IIFE that holds the Live Monitor state and behaviour and exposes
+   `window.TerraApp`.
+5. **`static/ml.js`**, the five analytical views (§8.8).
 
-The page regions are a top bar (status pill, freshness, refresh), a controls sidebar (window, magnitude,
-depth, layers, legend, source), metric cards, the map, an inspector (event detail and event list),
-charts and the model card. A modal dialog hosts point analysis.
+Static URLs carry `?v=<file modification time>` (the `asset()` template helper), so a browser never
+runs a cached script from before an update.
 
-<figure><img class="shot" src="images/dashboard-desktop.png" alt="Desktop dashboard"><figcaption><b>Figure 3.</b> The running dashboard at 1440×900 on 2026-10-18, captured with headless Chrome. All values come from live USGS data.</figcaption></figure>
+The page regions are a top bar (status pill, freshness, refresh), a row of module tabs, a controls
+sidebar (shared feed controls plus each module's form, layers, legend, source), the map, an inspector
+and a panel area below the map. The inspector and panel area show different content in each view. A
+modal dialog hosts the legacy point analysis.
+
+<figure><img class="shot" src="images/dashboard-desktop.png" alt="Desktop dashboard"><figcaption><b>Figure 3.</b> The Live Monitor at 1440×900 on 2026-10-19, captured with headless Chrome. The tab row above the controls leads to the five analytical views (Chapter 8). All values come from live USGS data.</figcaption></figure>
 
 ## 4.2 State
 
@@ -1036,7 +1102,7 @@ event markers (Figure 8).
 
 <figure><img class="shot" src="images/feed-error.jpg" alt="Feed error state"><figcaption><b>Figure 8.</b> A real failure test: a second instance started with <code>TERRAWATCHER_USGS_URL</code> pointing to an unresolvable host. The error banner and Retry button appear, the list states the cause, the plate layer and map still work, and no events are invented.</figcaption></figure>
 
-# 7 Machine learning pipeline
+# 7 Legacy model: the conditional severity classifier
 
 ## 7.1 The question, stated precisely
 
@@ -1051,7 +1117,7 @@ now, how likely is it to be M5+?
 
 Why this formulation? It is honest and testable. Every training row has a real, known answer, and the
 same feature definitions can be computed at serving time without any future information. It is also a
-hard problem with a well-known physical answer: by the Gutenberg–Richter relation (§8.1), the share of
+hard problem with a well-known physical answer: by the Gutenberg–Richter relation (§9.1), the share of
 events above a magnitude threshold is roughly constant. Strong performance should therefore *not* be
 expected, and the evaluation confirms this.
 
@@ -1311,7 +1377,7 @@ the base rate, and the word "risk" would imply a probability of occurrence.
 ## 7.14 Evaluation risks that remain
 
 * **A single test period.** Results for one three-month window may not generalise. A rolling-origin
-  evaluation (Chapter 14) would be stronger.
+  evaluation (Chapter 15) would be stronger.
 * **Temporal correlation across the split boundary.** Aftershock sequences that start in training and
   continue into validation make adjacent periods related. A gap ("embargo") between splits would reduce
   this.
@@ -1322,9 +1388,568 @@ the base rate, and the word "risk" would imply a probability of occurrence.
 * **Out-of-distribution queries.** Scoring an arbitrary map point evaluates the model where no event
   occurred. Points far from any seismicity are outside the training distribution.
 
-# 8 Scientific validity and evaluation
+# 8 Analytical modules: sequences, forecasts, anomalies, aftershocks
 
-## 8.1 Why earthquake prediction is so hard
+Chapter 7 described the original classifier. This chapter describes the four analytical modules added in
+the `ml-platform` work. They live in the `analytics/` package, are trained or evaluated offline by
+`ml_pipeline.py`, and are served by the routes in `app.py`. Every number quoted here comes from the
+generated files in `models/`, which the Model Performance view and `docs/ml_evaluation.md` read as well.
+
+## 8.1 What each module answers
+
+| Module | Question | Kind of method | Kind of output |
+|---|---|---|---|
+| A. Sequence Explorer | Which events in the current feed group together in space and time? | Unsupervised (DBSCAN) | Statistical grouping of observed events |
+| B. Activity Forecasts | How many M ≥ 4.5 (or 5.0) events will a 10° cell record in the next 7 days? | Supervised count regression | Model estimate with an interval |
+| C. Anomaly Detection | Is a cell's recent count unusually high compared with its own history? | Hypothesis test with multiple-comparison control | Statistical finding about observed data |
+| D. Aftershock Analysis | How did activity evolve after a chosen earthquake, and does an Omori–Utsu decay describe it? | Descriptive statistics + maximum-likelihood point-process fit | Statistics, plus a model only when it passes checks |
+
+The layer table of §1.1 therefore gains two rows: *statistical findings* (Modules A and C, deterministic
+given the data and parameters) and *count forecasts* (Module B, a model estimate whose quality was
+measured out of sample). None of them predicts an individual earthquake.
+
+## 8.2 The shared data layer
+
+**One validation rule set.** Every module turns events into a table with
+`analytics.catalog.events_to_frame`:
+
+* Rows without a finite time, a latitude in [−90, 90] or a longitude in [−180, 180] are dropped and counted.
+* Duplicate ids keep the copy with the latest `updated` time.
+* A missing magnitude or depth stays `NaN`. Such a row is never counted towards a magnitude threshold.
+
+The feed client already de-duplicates. Applying the same rules again means the analytical code does not
+depend on that.
+
+**The historical catalogue.** `python ml_pipeline.py download` fetches M ≥ 4.5 from 2000-01-01 to the
+most recent Monday (2026-10-19 for the committed models), in 120-day chunks:
+
+* A chunk that reaches the 20 000-event limit is split in half until it fits.
+* A failed chunk is retried and then aborts the download. The file therefore never contains a silent
+  gap that would later look like zero activity.
+
+The committed run downloaded 187 784 events in 82 chunks, with no invalid or duplicate records. The CSV
+is git-ignored; its JSON description records exactly what was requested.
+
+**The region grid** (`analytics/regions.py`):
+
+* 18 × 36 cells of 10° × 10°, with ids such as `R+30+140` (the lower-left corner).
+* Latitude 90 belongs to the top row and longitude 180 wraps to −180.
+* Neighbours wrap in longitude but not over the poles.
+* Cells are equal-angle, so a cell at 60° covers half the area of an equatorial cell. Counts are only
+  ever compared *within* a cell over time.
+
+**Weekly count matrices.** `count_matrix` returns `C[r, w]`, the number of events with
+`mag ≥ threshold` in cell r and week w. Weeks are half-open, `[epoch + 7w d, epoch + 7(w+1) d)`, so an
+event exactly on a boundary belongs to the later week. A tiny tolerance makes "4.5 ≥ 4.5" true for
+decimal magnitudes.
+
+**Gaps versus zeros.** A zero in a complete download is a real zero. A failed request is an error and
+never an empty table. In live data, a UTC day with no M ≥ 4.5 event anywhere on Earth is treated as a
+possible feed gap: the global rate is about 20 per day, and such a day never occurred in 2000–2026.
+
+## 8.3 Module A — space-time sequence detection
+
+**Distance.** Each event becomes an Earth-centred unit vector scaled by the chord length that
+corresponds to `eps_km`, plus a time coordinate scaled by `eps_hours`:
+
+<!-- src: analytics/sequences.py -->
+```python
+def scaled_coordinates(lats, lons, times_ms, eps_km, eps_hours):
+    """4-D coordinates in which the neighbourhood above is the Euclidean unit ball."""
+    xyz = geo.unit_vectors(lats, lons) / geo.chord_for_arc_km(eps_km)
+    t = (np.asarray(times_ms, np.int64) - int(np.min(times_ms))) / HOUR_MS / eps_hours
+    return np.column_stack([xyz, t])
+```
+
+In these coordinates DBSCAN runs with `eps = 1`. Two events are neighbours when
+(chord/chord(ε_km))² + (Δt/ε_h)² ≤ 1:
+
+* When Δt = 0, this is exactly "great-circle distance ≤ ε_km", because the chord grows monotonically
+  with the arc.
+* Points just either side of the antimeridian, or close to a pole, are close in 3-D, so neither case
+  needs special code. This is the classic mistake avoided: Euclidean distance on raw degrees treats
+  179.9° and −179.9° as 360° apart, and a degree of longitude at 85° N as 111 km.
+
+**Why DBSCAN.**
+
+* It needs no number of clusters.
+* It labels isolated events as noise, which is what most catalogue events are.
+* It handles elongated fault-parallel groups.
+* It is deterministic.
+
+HDBSCAN would adapt to regional density differences. However, it is an extra dependency and its
+parameters are less intuitive for the user-facing controls. Depth and magnitude are deliberately left
+out of the distance and only summarised afterwards.
+
+**What a sequence reports.**
+
+* **A stable id:** a hash of the earliest member's USGS id, so the same sequence keeps its id while that
+  event stays in the window.
+* **Counts:** members and core events.
+* **Time:** start, end and duration.
+* **Magnitude and depth:** distributions and histograms.
+* **Location:** a spherical centroid, and an extent with an antimeridian-aware longitude span.
+* **Linking statistics:** median nearest-member distance and the time gaps between events.
+* **Ambiguous border events:** non-core events within reach of core events from two sequences
+  (DBSCAN assigns them to just one).
+
+The API also returns a plain-language explanation of the linking rule and a limitations list.
+
+**Evaluation** (synthetic data with known labels, five seeds; never presented as real events):
+
+| Scenario | ARI (this method) | ARI, Euclidean on degrees | ARI, space only |
+|---|---:|---:|---:|
+| dense clusters + uniform noise | 1.000 | 0.998 | 1.000 |
+| two clusters at the same time, 400 km apart | 1.000 | 1.000 | 1.000 |
+| same place, 20 days apart | 1.000 | 1.000 | 0.000 |
+| cluster on the antimeridian | 1.000 | 0.814 | 1.000 |
+| clusters at 84.5° and 89.9° N | 1.000 | 0.474 | 1.000 |
+| duplicates (10) and invalid rows (4) | 1.000 | 1.000 | 1.000 |
+| two overlapping sequences 60 km apart | 0.000 | 0.000 | 0.000 |
+
+The last row is a real limitation. At the default ε = 50 km the two overlapping sequences chain into
+one. They separate only near ε = 15 km (ARI 0.82), and an even smaller ε starts fragmenting them
+(10 km → 0.58).
+
+ARI and NMI are only meaningful because the labels are known. The real catalogue has no ground truth,
+so no accuracy is claimed for real sequences. Internal indices such as the silhouette score are not
+reported, because they assume convex clusters and have no notion of noise.
+
+## 8.4 Module B — seven-day regional count forecasting
+
+**Target.** For an origin T, a cell r and a threshold m:
+
+> y(r, T) = number of USGS events with magnitude ≥ m and epicentre in r during [T, T + 7 d).
+
+**Features at the origin** (`analytics/regional_features.py`). All of them are read from week columns
+*before* T:
+
+| Feature | Unit | Definition |
+|---|---|---|
+| `lag1`, `lag2` | events | Counts in the week before T and the week before that |
+| `mean_4w`, `mean_13w`, `mean_52w` | events/week | Trailing mean weekly counts |
+| `std_13w` | events/week | Population SD of the 13 weekly counts before T |
+| `neighbor_mean_4w` | events/week | 4-week mean summed over the up-to-8 neighbouring cells |
+| `large_4w` | events | M ≥ 6 events in the cell in the 4 weeks before T |
+| `weeks_since_last` | weeks | Weeks since the last week with a qualifying event (52 = none in a year) |
+
+The core of the implementation is a cumulative sum along the week axis, so any window sum is one
+subtraction:
+
+<!-- src: analytics/regional_features.py -->
+```python
+    def window_sum(cs, w):
+        return cs[:, ks] - cs[:, ks - w]                  # (regions, origins)
+...
+    # Index of the latest non-empty column strictly before each origin.
+    cols = np.arange(Cr.shape[1])
+    last = np.where(Cr > 0, cols[None, :], -1)
+    last = np.maximum.accumulate(last, axis=1)
+    last_before = last[:, ks - 1]
+```
+
+`cs[:, k]` is the sum of the columns *before* k, so the window ends exactly at the origin.
+
+**Leakage tests.**
+
+* One test changes the target week and every later week, then checks that the features do not change.
+* Another builds a 70-week training matrix and a 52-week live matrix from the same raw events, and
+  checks that the features at the same origin are bit-for-bit identical. Training and serving
+  therefore cannot drift apart.
+
+**Temporal design.**
+
+<figure><img src="diagrams/forecast-timeline.svg" alt="Forecast evaluation timeline"><figcaption><b>Figure 8a.</b> Weekly origins from 2001 (after a 52-week warm-up). Validation chooses the model and the dispersion; the test period is evaluated walk-forward with yearly refits.</figcaption></figure>
+
+* **Train:** targets ending on or before 2016-01-04 (783 weekly origins).
+* **Validation:** 2016-01-04 → 2020-01-06 (209 origins). It is used to choose the model,
+  hyperparameters and NB dispersion.
+* **Final test:** 2020-01-06 → 2026-10-19 (354 origins). For each calendar year, every model is refit on
+  all samples whose target ends before the first origin of that year:
+
+<!-- src: analytics/forecast_training.py -->
+```python
+    for year in years:
+        fold_k = np.array([k for k in k_test if datetime.fromtimestamp((epoch_ms + k * WEEK_MS) / 1000,
+                                                                       tz=timezone.utc).year == year])
+        k_fit = k_all[k_all + 1 <= fold_k.min()]
+```
+
+`k + 1 ≤ first test origin` means the target week of every training sample ends before the test year
+starts. A test asserts this ordering for every fold. Region eligibility (a 2001–2015 mean of at least
+0.1 events per week: 131 cells at M4.5, 68 at M5.0) uses only the training period. The GLM's
+`log1p` and standardisation run inside its scikit-learn pipeline, so they are refit on each training window.
+
+**Candidates and selection.**
+
+* Three baselines: the historical mean of the training window, and the rolling 4-week and 52-week means.
+* A Poisson GLM with four L2 strengths.
+* Poisson-loss gradient-boosted trees in two sizes.
+
+The model with the lowest validation mean Poisson deviance wins within each family. Trees are preferred
+over the GLM only if they are more than 1 % better, because the GLM is easier to explain. That rule
+picked trees at M4.5 (2.3 % better on validation) and the GLM at M5.0 (0.75 %). Deep learning was not
+tried: with nine features and about 100 000 sparse counts, it would add opacity without a plausible gain.
+
+**Uncertainty.** Predictions are means. The predictive distribution is negative binomial (NB2) with a
+single dispersion α fitted by maximum likelihood on the *validation* predictions:
+
+<!-- src: analytics/forecast.py -->
+```python
+def fit_dispersion(y, mu):
+    """MLE of the NB2 dispersion alpha given observed counts and model means (alpha in [1e-8, 50])."""
+    y, mu = np.asarray(y, float), np.maximum(np.asarray(mu, float), MIN_MU)
+
+    def nll(log_a):
+        return -nb_logpmf(y, mu, float(np.exp(log_a))).sum()
+```
+
+**Results on the final test period** (M4.5, 46 374 cell-weeks):
+
+| Model | MAE | RMSE | Poisson deviance | NB log score | 80 % coverage |
+|---|---:|---:|---:|---:|---:|
+| Gradient boosting (selected) | 0.933 | 4.644 | 1.985 | 1.091 | 0.958 |
+| Poisson GLM | 0.963 | 4.609 | 2.027 | 1.101 | 0.958 |
+| Historical mean | 0.966 | 4.787 | 2.304 | 1.129 | 0.952 |
+| Rolling 52-week mean | 0.971 | 4.765 | 2.175 | 1.114 | 0.952 |
+| Rolling 4-week mean | 1.003 | 5.019 | 4.030 | 2.015 | 0.916 |
+
+How to read this honestly:
+
+* Deviance falls by 13.9 % relative to the historical mean, and the model is better in every test year.
+* MAE barely moves, because most cell-weeks are 0 or 1.
+* The model is *worse* than the historical mean in 64 of the 131 cells. The aggregate gain comes from
+  active cells with ongoing sequences, where recent counts carry information.
+* At M5.0 the selected GLM improves deviance by 6.6 % but has a slightly *worse* MAE than the
+  historical mean (0.553 vs 0.546).
+* The 80 % intervals cover about 95 % of test weeks. They are conservative, because discrete counts
+  cannot hit a quantile exactly and one α must serve every cell.
+* The rolling 4-week mean scores badly on deviance because it predicts exactly zero after a quiet month.
+  Deviance and log score punish that harshly when an event then occurs. MAE does not.
+
+Percentage errors (MAPE) are not reported, because they are undefined when the observed count is zero.
+
+<figure><img class="shot" src="images/forecast-view.png" alt="Activity Forecasts view"><figcaption><b>Figure 8b.</b> Activity Forecasts on 2026-10-19 (headless Chrome, live data). Cells are coloured by the expected M4.5+ count for 2026-10-19 → 2026-10-26; the list gives each cell's 80 % interval and last week's observed count. The top cell is the M7.7 Panama sequence.</figcaption></figure>
+
+**Serving.** `/api/forecast` uses the cached 400-day history and fixes the origin at the start of the
+current UTC day. It builds the same features with `live_matrices` and runs the loaded estimator, which
+is never refit per request. It returns the mean, the 80 % and 95 % intervals, P(≥ 1), the baselines and
+the data window. `/api/forecast/<cell>` adds the 52 observed weeks and the walk-forward test forecasts
+for that cell, which the chart draws next to each other.
+
+## 8.5 Module C — elevated observed activity
+
+The operational definition is precise enough to be tested. Weekly counts in a cell are modelled as
+independent negative-binomial (NB2) counts with an unknown mean μ and dispersion α. The p-value is
+conditional on the total of the reference and observation windows, which removes μ from the test:
+
+<!-- src: analytics/anomaly.py -->
+```python
+def conditional_p_value(observed, reference_total, k, n, alpha):
+...
+    total = x + y
+    out = np.ones(y.shape)
+    pois, nb = (y > 0) & (a <= 0), (y > 0) & (a > 0)
+    out[pois] = stats.binom.sf(y[pois] - 1, total[pois], k / (n + k))
+    r = 1.0 / a[nb]
+    out[nb] = stats.betabinom.sf(y[nb] - 1, total[nb], k * r, n * r)
+```
+
+The method:
+
+* For each cell, the reference window (26 or 52 weeks) gives a weekly mean μ̂ and a total X. The
+  observation window (k = 1, 2 or 4 weeks) gives a total y.
+* The weekly dispersion α is the larger of the reference window's method-of-moments estimate and the
+  cell's 2001–2015 **maximum-likelihood** estimate (`models/anomaly_reference.json`).
+* With independent NB2(μ, α) weeks, the reference total is NB with shape n/α and the window total is NB
+  with shape k/α, and both have the same scale. Given their sum N = X + y, the window total is
+  BetaBinomial(N, k/α, n/α), whatever μ is. With α = 0 this becomes Binomial(N, k/(n + k)), the
+  classical conditional test for two Poisson counts.
+* The one-sided p-value is P(Y ≥ y | N).
+* Benjamini–Hochberg turns the p-values of every tested cell into q-values.
+* A cell is **elevated** when q ≤ FDR and at least 3 events were observed.
+* Cells with fewer than 5 reference events are `insufficient_reference`, never "normal".
+* When feed gaps are suspected, unflagged cells are `data_incomplete`.
+* `expected` = kμ̂ and `reference_sd` = √(k·w + k²·w/n), with w = μ̂ + αμ̂², are shown for context.
+  They do not enter the p-value. The response fields are the same as before.
+
+**How the test got here.** Three versions were evaluated on the same null simulation: stationary NB
+weekly counts with each cell's *2016–2019* mean and variance (M4.5, 140 cells, 4-week window, 52-week
+reference). The long-term dispersion comes from 2001–2015, so it is never evaluated on the data it was
+estimated from. Every flag in this simulation is false. With every cell null, BH at FDR 0.05 should
+leave at most about 5 % of runs with a flag.
+
+1. **Reference window only.** 35 % of runs raised at least one false alert.
+2. **Plug-in NB with a moment floor.** The NB had mean kμ̂ and variance k·w + k²·w/n, and α had a floor
+   at the 2001–2015 method-of-moments dispersion. 12 % of the first 200 runs had a false alert (13.65 %
+   over 2 000 runs). Detection of a +4× excess after BH was 9 %.
+3. **Conditional test with an MLE floor** (the current version).
+
+Two diagnostic runs located the remaining problem in version 2. Given the simulation's *true* 2016–2019
+dispersion but the estimated mean, 11.3 % of runs still had a false alert. Given both, 3.55 %. The
+excess therefore came mostly from the estimated mean, not from the dispersion. For heavy-tailed counts,
+52 weeks usually *underestimate* μ, because the bursts that carry the mean are rare. The variance term
+k²·w/n is symmetric and cannot correct that skew. Conditioning removes μ instead of estimating it.
+
+Power had a separate cause: the moment floor. One megathrust sequence dominates a 15-year variance but
+not a likelihood. Over the 140 simulated cells the moment estimate has quartiles 2.0 / 4.4 / 10.8, and
+the MLE has 1.0 / 2.4 / 4.6. With α around 4, a +4× excess almost never reaches the p ≈ 3 × 10⁻⁴ that BH
+needs across 140 cells.
+
+**Comparison.** All six variants saw the same 2 000 null runs and the same injection trials. The choice
+used only the null simulation and the 2016–2019 injection; the held-out columns were computed after it.
+
+| Variant | Null runs with a false alert | Detected +2× / +4×, 2016–2019 | Detected +2× / +4×, held-out | Held-out flags (88 runs) |
+|---|---:|---:|---:|---:|
+| Previous: plug-in NB, moment floor | 0.1365 | 0.0157 / 0.0973 | 0.0156 / 0.0913 | 70 |
+| Plug-in NB, MLE floor | 0.1900 | 0.0470 / 0.1843 | 0.0435 / 0.1809 | 104 |
+| Plug-in NB, empirical null (99th percentile) | 0.1265 | 0.0120 / 0.0476 | 0.0122 / 0.0492 | 58 |
+| Plug-in NB, empirical null (95th percentile) | 0.2235 | 0.0463 / 0.2230 | 0.0448 / 0.2230 | 128 |
+| Conditional, moment floor | 0.0345 | 0.0108 / 0.0671 | 0.0117 / 0.0626 | 42 |
+| **Conditional, MLE floor (adopted)** | **0.0560** | **0.0351 / 0.1549** | **0.0334 / 0.1506** | **80** |
+| Diagnostic: true α, estimated mean | 0.1130 | — | — | — |
+| Diagnostic: true α and mean | 0.0355 | — | — | — |
+
+The empirical null sets each cell's floor to the smallest α whose 4-week NB total reaches the cell's
+2001–2015 99th (or 95th) percentile 4-week count with probability at least 1 % (or 5 %).
+
+Reading the table:
+
+* **Only the adopted variant improves both measures.** Runs with a false alert fall from 0.1365 to
+  0.056 (standard error 0.005). On the first 200 runs, which are identical to the earlier 200-run
+  evaluation, the rate falls from 0.12 to 0.045. Held-out detection at +4× rises from 0.091 to 0.151
+  (12 592 trials).
+* **Each change alone fails.** The conditional test with the moment floor is calibrated (0.0345) but
+  loses power (0.063 at +4×). The MLE floor with the plug-in mean gains power but raises false alerts
+  to 0.19. Together they work, because conditioning pays for the lighter floor.
+* **The empirical null moves along the trade-off.** Depending on the quantile it trades false alerts
+  for power, and nothing principled fixes the quantile.
+* **Declustering was not evaluated.** The null simulation and the injection operate on counts, and
+  declustering would remove the aftershock sequences that this module mainly finds. It remains future
+  work, for a separate "background-rate change" question.
+
+**Remaining miscalibration.** The adopted test is still slightly above nominal at the default setting,
+and more so with a 26-week reference. Each row below uses the same simulation design with 1 000 runs:
+
+| Threshold | Window | Reference | Cells | Previous | Conditional, moment floor | Adopted |
+|---|---:|---:|---:|---:|---:|---:|
+| M4.5 | 1 w | 26 w | 106 | 0.103 | 0.033 | 0.073 |
+| M4.5 | 1 w | 52 w | 140 | 0.076 | 0.028 | 0.044 |
+| M4.5 | 2 w | 26 w | 106 | 0.134 | 0.040 | 0.076 |
+| M4.5 | 2 w | 52 w | 140 | 0.111 | 0.039 | 0.065 |
+| M4.5 | 4 w | 26 w | 106 | 0.198 | 0.042 | 0.081 |
+| M4.5 | 4 w | 52 w | 140 | 0.152 | 0.037 | 0.063 |
+| M5.0 | 1 w | 26 w | 38 | 0.063 | 0.024 | 0.046 |
+| M5.0 | 1 w | 52 w | 65 | 0.056 | 0.019 | 0.040 |
+| M5.0 | 2 w | 26 w | 38 | 0.068 | 0.023 | 0.047 |
+| M5.0 | 2 w | 52 w | 65 | 0.063 | 0.024 | 0.044 |
+| M5.0 | 4 w | 26 w | 38 | 0.094 | 0.028 | 0.065 |
+| M5.0 | 4 w | 52 w | 65 | 0.080 | 0.028 | 0.051 |
+
+* The adopted test is below the previous method in all 12 settings. It is at or below 0.05 in 5 of
+  them, and its worst case is 0.081 (M4.5, 4-week window, 26-week reference).
+* The conditional test with the moment floor stays below 0.05 everywhere, at the cost of power.
+* The remaining false alerts come from cells whose 2016–2019 dispersion is several times anything in
+  their 2001–2015 record. The cells with the most false alerts were near Vanuatu (true α 2.8 against a
+  2001–2015 MLE of 0.8), the South Sandwich Islands (36.6 against 9.2) and Kaikōura (19.2 against 0.5).
+  No per-cell history can anticipate a regime that has not happened there yet.
+
+**Power, measured by injection.** Extra events were added to the last week of every unflagged tested
+cell, one cell at a time, in each of the 88 held-out 4-week windows (12 592 trials per factor). The
+earlier evaluation used one random cell per window (88 trials), so these estimates are about 12 times
+more precise:
+
+| Injected excess | Detected after BH | p ≤ 0.05 before correction | Rolling rule |
+|---|---:|---:|---:|
+| +0.5 × expected | 0.0014 | 0.0559 | 0.1832 |
+| +1 × expected | 0.0039 | 0.1105 | 0.3154 |
+| +2 × expected | 0.0334 | 0.2809 | 0.7272 |
+| +4 × expected | 0.1506 | 0.6047 | 0.9085 |
+
+The detector is still conservative. It flags strong excesses, which in practice means active aftershock
+sequences, and misses moderate ones. Most cells' weekly counts are genuinely heavy-tailed, so a +4×
+excess is often within their normal range. The rolling rule catches more, but at about 200 times the
+false-alert rate (0.102 per cell test, against 0.00046).
+
+**Held-out behaviour, 2020–2026.** There is no ground truth on real data. More flags is what higher power
+predicts; it is not evidence of better detection.
+
+| Threshold / window | Runs | Flags (adopted / previous) | Runs with a flag (adopted / previous) |
+|---|---:|---:|---:|
+| M4.5, 1 week | 354 | 99 / 77 | 0.2203 / 0.1695 |
+| M4.5, 2 weeks | 177 | 93 / 74 | 0.3672 / 0.3051 |
+| M4.5, 4 weeks | 88 | 80 / 70 | 0.5341 / 0.4659 |
+| M5.0, 1 week | 354 | 48 / 38 | 0.1130 / 0.0904 |
+| M5.0, 2 weeks | 177 | 34 / 32 | 0.1638 / 0.1469 |
+| M5.0, 4 weeks | 88 | 33 / 30 | 0.2500 / 0.2273 |
+
+**Missing data.** Removing 3 random days from 60 real windows was always detected by the gap check. It
+also removed 9.9 % of the flags, which is why those windows are reported as incomplete rather than normal.
+
+<figure><img class="shot" src="images/anomaly-view.png" alt="Anomaly Detection view"><figcaption><b>Figure 8c.</b> Anomaly Detection on 2026-10-19, captured with the previous test (plug-in mean, moment floor). One cell is elevated (amber); dashed cells had too little reference data to be assessed. The inspector lists the test definition, then cells with their status and q-value.</figcaption></figure>
+
+Isolation Forest was considered and rejected. On sparse, overdispersed counts it has no explicit
+reference, and its scores cannot be read as probabilities.
+
+Live, on 2026-10-19, the previous test flagged one of 145 tested cells: 0–10° N, 90–80° W, with 67 events
+against about 4.2 expected (q = 1.9 × 10⁻¹¹). That is the M7.7 Panama sequence, and the UI says that is
+what it is. The adopted test was run on the downloaded catalogue for the same 4-week window (to
+2026-10-19 00:00 UTC, M4.5). It flags two cells:
+
+* the Panama cell (q = 2.4 × 10⁻¹⁰);
+* 30–20° S, 160–170° E: 64 events against about 3.2 expected (q = 0.0026). This is the sequence of the
+  M 6.7 Loyalty Islands earthquake of 2026-09-25. With its 2001–2015 moment floor (α = 18.6) the
+  previous test gave q = 0.093; the MLE floor is 4.5.
+
+## 8.6 Module D — event-centred aftershock analysis
+
+**Selection** (`analytics/aftershock.select`). It is deterministic and listed in every response:
+
+* the great-circle distance to the reference epicentre is at most the radius (default: Wells &
+  Coppersmith rupture length 10^(−2.44 + 0.59 M) km, clipped to 30–1000 km);
+* the magnitude is at least the threshold, and events without a magnitude are excluded;
+* optional depth limits apply, and once a limit is set, events without a depth are excluded;
+* there is a pre-event window and a post-event window, and the post window never extends past the present;
+* the reference event itself is excluded.
+
+The radius query is done by USGS itself (`maxradiuskm`), so only nearby events are downloaded.
+
+**Statistics.** The analysis returns:
+
+* daily bins, hourly bins for the first three days, and logarithmic time bins (rates per day);
+* the cumulative count;
+* magnitude, depth and distance histograms;
+* a conditional binomial test that the post-event rate exceeds the pre-event rate.
+
+Daily bins hide the rapid early decay, and the log-time bins show it. A zero bin means no catalogue
+event met the criteria. Regional network outages cannot be detected from this query, and the response says so.
+
+**Model.** λ(t) = μ + K/(t + c)^p, with the background μ fixed to the pre-event rate. The negative
+log-likelihood of an inhomogeneous Poisson process on [a, b] is:
+
+<!-- src: analytics/aftershock.py -->
+```python
+def _nll(theta, t, mu, a, b):
+    logK, logc, p = theta
+    K, c = math.exp(logK), math.exp(logc)
+    lam = mu + K * (t + c) ** (-p)
+    if np.any(lam <= 0) or not np.all(np.isfinite(lam)):
+        return 1e12
+    return -(np.log(lam).sum() - mu * (b - a) - _integral(K, c, p, a, b))
+```
+
+It is minimised with L-BFGS-B from nine starting points, on log K and log c so that both stay
+positive. The fit starts `fit_start_hours` after the event (6 h by default), because catalogues miss
+many early aftershocks. If the optimum puts c at its lower bound, c is not resolvable from data that
+start hours later. It is then fixed, K and p are re-estimated, and the UI explains this: it is a
+statement about resolution, not a failure.
+
+**When the fit is shown.** It needs at least 20 events, and all of these checks must pass:
+
+* the optimiser converged;
+* no parameter is at a bound;
+* the Hessian is positive definite, so standard errors and 95 % intervals exist;
+* the KS test of the transformed times (which are uniform if the model is right) gives p ≥ 0.05;
+* the AIC beats a constant-rate model by at least 2.
+
+Otherwise the status is `unreliable` or `insufficient_data`, the reasons are listed, and no curve is
+drawn. When it is drawn, the curve covers only the fit window and is never extrapolated.
+
+**Evaluation across sequences.** The analysis covered 356 M ≥ 7 mainshocks from 2001 to 2026. 25
+others were excluded because a larger event occurred shortly before or within the window. With M4.5+
+data, the 90-day fits were:
+
+* reliable for 103 sequences;
+* unreliable for 43;
+* not attempted for 210, which had too few events.
+
+The median p of the reliable fits was 1.32 (IQR 1.09–1.62), consistent with published values around 1.
+For an out-of-sample check, the model was fitted on days 0.25–30 and used to predict the count in days
+30–90. The median |log((obs+1)/(pred+1))| was:
+
+* 0.41 for Omori–Utsu;
+* 0.94 for the last-week rate held constant;
+* 1.25 for the background rate alone.
+
+The Poisson 95 % intervals covered only 58 % of the outcomes, because they ignore parameter uncertainty
+and secondary sequences. The application therefore shows intervals for parameters, never for future counts.
+
+The live example from §8.5 was the M7.7 Panama event `us6000u18k` with 67 events at M ≥ 4.5 in 9.3 days.
+Its fit gave p = 1.21 (95 % CI 0.92–1.49), a KS p-value of 0.68 and ΔAIC = 64.7 against the constant-rate model.
+
+## 8.7 Lifecycle, artifacts and failure states
+
+| Step | Command | Writes |
+|---|---|---|
+| Download catalogue | `python ml_pipeline.py download` | `data/history_catalog.csv` + `.json` (git-ignored) |
+| Train and evaluate forecasts | `python ml_pipeline.py forecast` | `models/forecast_m4.5.joblib/.json`, `forecast_m5.0.*`, `forecast_backtest.json` |
+| Evaluate anomaly detection | `python ml_pipeline.py anomaly` | `models/anomaly_reference.json` (served), `anomaly_eval.json` |
+| Synthetic clustering benchmark | `python ml_pipeline.py sequences` | `models/sequence_eval.json` |
+| Omori–Utsu across sequences | `python ml_pipeline.py aftershock` | `models/aftershock_eval.json` |
+| Everything + report | `python ml_pipeline.py all` | all of the above + `docs/ml_evaluation.md` |
+
+* **Determinism.** Seeds are fixed (`SEED = 42` for the trees, `default_rng(7)` for the simulations).
+  Tree early stopping is off. Two consecutive `all` runs gave identical JSON apart from timestamps.
+* **Remaining variation.** The catalogue itself changes, because USGS revises events.
+* **Validated loading.** `ForecastModel` checks the artifact version, the feature-name list, the
+  scikit-learn version, the region list and α. Any mismatch leaves the model "unavailable" with the
+  reason. A wrong-version pickle is never used.
+* **Degradation.** A missing forecast model gives `503 model_unavailable` and makes `/api/health`
+  `degraded`. A missing `anomaly_reference.json` makes anomaly detection fall back to the window
+  dispersion and say so. Missing evaluation files make the Model Performance view print
+  "not evaluated yet". The live monitor never depends on any of these.
+
+## 8.8 How the analytical views are built
+
+The frontend stays framework-free. Three new files sit next to `core.js` and `dashboard.js`:
+
+* `static/charts.js` returns SVG strings for line, step, bar, dot, band and error-bar charts:
+  * every axis is labelled with a unit;
+  * every chart has `role="img"` and a `<title>`;
+  * empty data produces an explicit message instead of an empty frame;
+  * log axes skip non-positive values.
+* `static/analytics.js` holds the pure view logic:
+  * validators for every analytical response (a malformed payload is refused with a message);
+  * `createTracker()` for superseded requests;
+  * colour scales, the sequence-layer spec and the texts that explain flags and fits.
+* `static/ml.js` contains the five views as accessible tabs (arrow keys, `aria-selected`, a hash such
+  as `#forecast`). Each view has its own controls, module map layer, inspector pane and panel area.
+  `dashboard.js` exposes a small `window.TerraApp` interface (`fetchJson`, the map, hooks for map
+  clicks, feed reloads and "analyse this event").
+
+Hand-offs connect the modules:
+
+* an event in Live Monitor, the largest event of a sequence, or the largest event in an elevated cell
+  opens Aftershock Analysis with that event pre-filled;
+* for a sequence, the radius is preset to cover its extent.
+
+Up to four aftershock analyses can be overlaid. The comparison warns when they use different magnitude,
+depth or window settings.
+
+## 8.9 Questions to expect
+
+* **"Is this earthquake prediction?"** No. The forecast is a weekly count for a 1100 km cell, and its
+  skill comes mostly from persistence of ongoing sequences. It cannot anticipate a sequence that has not
+  started. The README, the UI and this guide all say so.
+* **"How do you know there is no leakage?"** Features are computed only from columns before the origin,
+  and two tests enforce it: changing the future leaves the features unchanged, and training and serving
+  features are identical. The test period is evaluated walk-forward, with fold boundaries also asserted
+  by a test. α and every hyperparameter come from validation only.
+* **"Why is the anomaly detector so insensitive?"** Because aftershock clustering makes weekly counts
+  heavy-tailed, so an honest reference is wide. A detector calibrated on one quiet year flags far too
+  often. Conditioning on the window total and a per-cell maximum-likelihood dispersion floor lowered
+  the false alerts and raised detection at +4× from 9 % to 15 % at the same time. Moderate excesses
+  stay undetectable at a 5 % run-level error rate. Each trade-off was measured, not assumed (§8.5).
+* **"What would you improve first?"**
+  * ETAS (space-time branching) modelling, which unifies sequences, forecasts and aftershocks.
+  * Declustering before the anomaly test.
+  * Per-cell or covariate-dependent dispersion.
+  * Magnitude-of-completeness estimation per region and time (see Chapter 15).
+
+
+# 9 Scientific validity and evaluation
+
+## 9.1 Why earthquake prediction is so hard
 
 Earthquake *prediction* means specifying time, location and magnitude narrowly enough to act on. After
 more than a century of research, it is not possible. The main reasons:
@@ -1346,7 +1971,7 @@ and short-term aftershock forecasts (Omori–Utsu decay, ETAS models). These giv
 regions and time windows, with stated uncertainty, and are evaluated prospectively. TerraWatcher implements
 neither.
 
-## 8.2 Retrospective pattern recognition vs prospective forecasting
+## 9.2 Retrospective pattern recognition vs prospective forecasting
 
 * **Retrospective:** fit a model to past data and measure it on other past data. Even with a chronological
   split, the developer has seen the whole dataset and could, consciously or not, tune choices to it.
@@ -1357,7 +1982,7 @@ neither.
 TerraWatcher's evaluation is **retrospective**, with a chronological holdout. That is the minimum honest
 standard for a time-dependent problem, not proof of forecasting ability.
 
-## 8.3 Why random splits mislead
+## 9.3 Why random splits mislead
 
 With a random split, an aftershock in the test set has its mainshock and sibling aftershocks in the
 training set, at nearly the same place, depth and time. The model can "recognise" the sequence rather
@@ -1365,7 +1990,7 @@ than learn anything general, so test scores are inflated. Features that summaris
 make this worse if the window extends *after* the event (the original project's density feature did).
 A chronological split plus strictly causal features removes both effects.
 
-## 8.4 Spatial leakage and geographic generalisation
+## 9.4 Spatial leakage and geographic generalisation
 
 Even with a chronological split, the test events occur in the same subduction zones as the training
 events. A model that memorises "the Kermadec trench produces many M5+ events" can score well on a
@@ -1373,7 +1998,7 @@ chronological split and still fail on a region it has never seen. To measure *ge
 generalisation, hold out whole regions (spatial blocks) for testing. This has **not** been done for
 TerraWatcher.
 
-## 8.5 Class imbalance and misleading accuracy
+## 9.5 Class imbalance and misleading accuracy
 
 With 27 % positives in the test period, a model that always says "not M5+" is 72.8 % accurate and
 useless. TerraWatcher therefore reports:
@@ -1389,7 +2014,7 @@ useless. TerraWatcher therefore reports:
 The high recall and low precision come from a low threshold (0.152). Almost everything is flagged, which
 is easy and uninformative. The threshold-free metrics (AUC, Brier) are the fairer summary.
 
-## 8.6 Baselines
+## 9.6 Baselines
 
 A metric means little without a reference. TerraWatcher compares against:
 
@@ -1399,14 +2024,14 @@ A metric means little without a reference. TerraWatcher compares against:
 3. **Logistic regression on the same features**: tells you whether the neural network's extra complexity
    buys anything.
 
-## 8.7 Probability calibration
+## 9.7 Probability calibration
 
 A forecaster is **calibrated** if, among all cases where it says 30 %, about 30 % happen. The **Brier
 score** (mean squared error of probabilities) rewards both calibration and sharpness. The **Brier skill
 score**, 1 − Brier<sub>model</sub> / Brier<sub>baseline</sub>, is 0 for no skill and 1 for perfect.
 TerraWatcher's +0.006 means its probabilities are essentially no more informative than the base rate.
 
-## 8.8 How to run an honest out-of-sample evaluation
+## 9.8 How to run an honest out-of-sample evaluation
 
 1. **Fix the question and the label** before looking at results.
 2. **Make every feature causal**: computable at prediction time from past data only.
@@ -1417,7 +2042,7 @@ TerraWatcher's +0.006 means its probabilities are essentially no more informativ
 7. **Report uncertainty**, for example with bootstrap confidence intervals or several rolling test windows.
 8. **Report negative results.** TerraWatcher's README and dashboard show its weak skill openly.
 
-## 8.9 What evidence would be required to claim forecasting ability
+## 9.9 What evidence would be required to claim forecasting ability
 
 * A forecast defined for **future time windows and regions**, not conditional on an event having occurred.
 * **Prospective** testing on data collected after the model was frozen, ideally by an independent party.
@@ -1436,9 +2061,9 @@ that it predicts earthquakes.
 | Model-derived estimates | **Yes** (exploratory) | Conditional severity score |
 | Independently validated forecasts | **No** | — |
 
-# 9 Configuration and deployment
+# 10 Configuration and deployment
 
-## 9.1 Supported runtime
+## 10.1 Supported runtime
 
 | Component | Version established by the project | Notes |
 |---|---|---|
@@ -1453,7 +2078,7 @@ that it predicts earthquakes.
 The project uses a plain virtual environment. Container files were intentionally not added, at the
 project owner's request.
 
-## 9.2 Clean setup on a new machine
+## 10.2 Clean setup on a new machine
 
 ```bash
 git clone https://github.com/Rase240/Real-Time-Earthquake-Monitoring-Geospatial-Analytics.git
@@ -1462,14 +2087,17 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1          # Windows PowerShell
 source .venv/bin/activate              # Linux / macOS
 pip install -r requirements-dev.txt    # runtime deps + pytest
-python -m pytest -q                    # expect: 91 passed
+python -m pytest -q                    # expect: 188 passed
 python app.py                          # http://127.0.0.1:5000
 ```
 
 This exact sequence (clone, new venv, install, test, start the server, request `/api/health`) was run
-on 2026-10-19 in a fresh directory. All 91 tests passed and the server reported `"status": "ok"`.
+on 2026-10-19 in a fresh directory for the earlier version of the project (91 tests at the time). The
+current suite of 188 tests was run in the project virtual environment; a fresh-clone run of this
+version has not been repeated. The analytical modules need no extra step: their models and evaluation
+files are committed in `models/`.
 
-## 9.3 Environment variables
+## 10.3 Environment variables
 
 No variables are required. Optional ones:
 
@@ -1492,7 +2120,7 @@ Example (bash): `TERRAWATCHER_PORT=5001 python app.py`.
 There are **no secrets**. USGS, Esri tiles and unpkg require no credentials, and the repository contains
 no keys. (The original code accepted a map-tile API key in the URL query string; that option was removed.)
 
-## 9.4 External services and artifact requirements
+## 10.4 External services and artifact requirements
 
 * **Network access** at runtime to `earthquake.usgs.gov` (server side) and to `server.arcgisonline.com`,
   `unpkg.com`, `fonts.googleapis.com` and `fonts.gstatic.com` (browser side).
@@ -1501,13 +2129,13 @@ no keys. (The original code accepted a map-tile API key in the URL query string;
 * **`data/tectonic_plates.geojson`.** Without it, `/api/health` reports `degraded`, `/api/plates`
   returns 404, and the model cannot compute `plate_distance_km`.
 
-## 9.5 Frontend and backend startup
+## 10.5 Frontend and backend startup
 
 There is no separate frontend server and no build step. `python app.py` serves the page at `/`, the
 static files under `/static/` and the API under `/api/`. The browser uses relative URLs
 (`/api/earthquakes`), so the same code works on any host and port.
 
-## 9.6 Health checks, ports, logs
+## 10.6 Health checks, ports, logs
 
 ```bash
 curl http://127.0.0.1:5000/api/health
@@ -1521,7 +2149,7 @@ Logs go to standard output in the format `timestamp LEVEL logger: message`, for 
 ('feed', 1, 2.5) …`. Set `TERRAWATCHER_LOG_LEVEL=DEBUG` for more detail. Werkzeug logs every request
 line.
 
-## 9.7 Stopping, restarting, retraining
+## 10.7 Stopping, restarting, retraining
 
 * **Stop:** press `Ctrl+C` in the terminal running `python app.py`.
 * **Restart** after code changes: stop and start again (debug mode is off, so there is no auto-reload).
@@ -1529,7 +2157,7 @@ line.
 * **Retrain:** `python train_model.py` (downloads about 16k events and takes roughly a minute) or
   `python train_model.py --offline`. Then restart the server, because artifacts are loaded at start-up.
 
-## 9.8 Production considerations (not implemented)
+## 10.8 Production considerations (not implemented)
 
 <div class="future" markdown="1"><span class="label">Future</span>
 The Werkzeug server prints "do not use it in a production deployment". A real deployment would run
@@ -1538,9 +2166,9 @@ several worker processes, each would hold its own cache, which is acceptable at 
 has been set up or tested.
 </div>
 
-# 10 Testing and debugging
+# 11 Testing and debugging
 
-## 10.1 Test suites
+## 11.1 Test suites
 
 | Suite | Tests | Framework | External services |
 |---|---:|---|---|
@@ -1549,7 +2177,14 @@ has been set up or tested.
 | `tests/test_model.py` | 9 | pytest | none (loads committed artifacts; copies in `tmp_path`) |
 | `tests/test_training.py` | 7 | pytest | none (synthetic catalogues) |
 | `tests/test_api.py` | 39 | pytest + Flask test client | USGS replaced by `FakeUSGS` |
+| `tests/test_geo_regions.py` | 12 | pytest | none |
+| `tests/test_forecast.py` | 16 | pytest | none (synthetic matrices; committed artifacts) |
+| `tests/test_sequences.py` | 14 | pytest | none (synthetic events) |
+| `tests/test_anomaly.py` | 19 | pytest | none |
+| `tests/test_aftershock.py` | 10 | pytest | none (simulated Omori–Utsu sequences) |
+| `tests/test_api_analytics.py` | 26 | pytest + Flask test client | USGS replaced by `FakeUSGS` (with per-query `handler`) |
 | `tests/frontend/core.test.js` | 10 | `node:test` | none |
+| `tests/frontend/analytics.test.js` | 16 | `node:test` | none |
 
 Parametrised tests count once per case (for example, 8 invalid-input cases for `/api/predict`). Run:
 
@@ -1559,7 +2194,7 @@ python -m pytest tests/test_api.py -q -k predict     # a subset
 node --test "tests/frontend/*.test.js"
 ```
 
-## 10.2 How USGS is faked
+## 11.2 How USGS is faked
 
 <!-- src: tests/conftest.py -->
 ```python
@@ -1570,22 +2205,26 @@ class FakeUSGS:
         self.query_payload = collection()
         self.count_payload = {"count": 0}
         self.error = None
+        self.handler = None      # optional callable(path, params) -> payload, for tests that need per-query answers
         self.calls = []
 
     def __call__(self, path, params, timeout=None, retries=None, session=None):
         self.calls.append((path, dict(params)))
         if self.error is not None:
             raise self.error
+        if self.handler is not None:
+            return copy.deepcopy(self.handler(path, dict(params)))
         return copy.deepcopy(self.query_payload if path == "query" else self.count_payload)
 ```
 
-The `fake_usgs` fixture monkeypatches `usgs_client._get` with an instance and clears the cache before
-and after each test. Tests then set `query_payload` (what USGS "returns") or `error` (how it "fails"), and
+The `fake_usgs` fixture monkeypatches `usgs_client._get` with an instance and clears both caches before
+and after each test. Tests then set `query_payload` (what USGS "returns"), `handler` (different answers
+per query, e.g. the event lookup and the radius search of the aftershock module) or `error` (how it "fails"), and
 can inspect `calls` to check what would have been sent. Everything above `_get`, including
 normalisation, caching, routing and serialisation, runs for real. Because the fake replaces the whole
 transport, no test can reach the internet by accident.
 
-## 10.3 Important tests explained
+## 11.3 Important tests explained
 
 | Test | Behaviour checked | Why it matters | A failure would mean |
 |---|---|---|---|
@@ -1604,7 +2243,7 @@ transport, no test can reach the internet by accident.
 | `test_unexpected_exception_is_generic_500` | The exception text is not returned | Information hiding | Internal details leaked |
 | `core.test.js: normalizeEvents tolerates missing optional fields` | `null` mag/depth/place; `javascript:` URL dropped | UI robustness and safety | "NaN km", XSS link |
 
-## 10.4 Acceptance testing performed
+## 11.4 Acceptance testing performed
 
 The following were exercised against the live USGS API and recorded on 2026-10-18/19. They are manual
 checks, not automated tests:
@@ -1620,10 +2259,32 @@ checks, not automated tests:
 8. **Request supersession.** Three rapid window changes ended on the last choice, with the spinner hidden.
 9. **Layouts.** 1440×900, 1200×850, 768×1024 and 375×812: no horizontal scroll; the drawer works on mobile.
 
+The analytical views were checked on 2026-10-19 against live data at 1440×900 and 375×812:
+
+10. **Sequences.** 30 days of M2.5+ gave 60 sequences among 1 847 events. Selecting the largest one (86
+    events, max M 7.7, Panama) highlighted its members, zoomed the map and drew its charts.
+11. **Forecasts.** 131 cells were shown. The Panama cell showed 11.31 expected (80 %: 1–26) with its baselines,
+    features and backtest.
+12. **Anomalies.** With the current (conditional) test, 2 of 145 tested cells were elevated: Panama (67
+    observed vs 4.15 expected, q = 2.4 × 10⁻¹⁰) and New Caledonia (66 vs 3.15, q = 0.0021). The Panama cell's
+    explanation, weekly chart and contributing events matched `/api/anomalies/R+00-090`.
+13. **Hand-off.** "Analyse activity after the largest event" opened Aftershock Analysis for `us6000u18k`:
+    67 events, fitted p = 1.21 (95 % CI 0.92–1.49), KS p = 0.68, ΔAIC 64.7.
+14. **Model Performance** matched `models/*.json`.
+15. **Degraded mode.** A second instance with `TERRAWATCHER_MODEL_DIR` pointing to an empty folder showed
+    "Forecast unavailable … No forecast was computed" with Retry, and "Not evaluated yet" for each
+    evaluation. Anomaly detection fell back to the reference-window dispersion with a notice (it then
+    flagged more cells). The live monitor was unaffected.
+16. **Mobile.** At 375×812 there was no horizontal page scroll in any view; wide tables scroll inside their cards.
+
+Steps 12 and 15 used the previous anomaly test (plug-in mean, moment floor). They were not repeated in
+the browser after the conditional test was adopted. §8.5 gives the adopted test's result for the same
+window, computed on the downloaded catalogue.
+
 **Not verified:** Firefox and Safari, sustained real rate limiting by USGS, long-running memory
 behaviour, and screen-reader output (only the ARIA attributes were reviewed).
 
-## 10.5 Troubleshooting reference
+## 11.5 Troubleshooting reference
 
 | Problem | Diagnosis | Fix |
 |---|---|---|
@@ -1640,7 +2301,7 @@ behaviour, and screen-reader output (only the ARIA attributes were reviewed).
 | Port in use | Another process on 5000 | `TERRAWATCHER_PORT=5001` |
 | Stale banner persists | USGS down for > 60 s | Data older than 30 min is never served; then an error appears |
 
-## 10.6 Debugging workflow
+## 11.6 Debugging workflow
 
 1. **Reproduce at the API level first:** `curl "http://127.0.0.1:5000/api/earthquakes?days=1"`. If the
    JSON is right, the bug is in the browser; if not, it is in Flask or upstream.
@@ -1649,9 +2310,9 @@ behaviour, and screen-reader output (only the ARIA attributes were reviewed).
    shows each `/api/*` call and its JSON.
 4. **Write a failing test** using `fake_usgs` with the problematic payload, fix the code, and keep the test.
 
-# 11 Security, reliability and performance
+# 12 Security, reliability and performance
 
-## 11.1 What is implemented
+## 12.1 What is implemented
 
 | Area | Protection | Where |
 |---|---|---|
@@ -1667,7 +2328,7 @@ behaviour, and screen-reader output (only the ARIA attributes were reviewed).
 | Resource bounds | ≤ 2000 events per response; cache ≤ 32 entries; 30-day maximum window | `config.py` |
 | Dependencies | `pip-audit -r requirements-dev.txt`: no known vulnerabilities (2026-10-19) | requirements files |
 
-## 11.2 Performance characteristics (measured locally)
+## 12.2 Performance characteristics (measured locally)
 
 | Operation | Observed time | Notes |
 |---|---|---|
@@ -1677,6 +2338,11 @@ behaviour, and screen-reader output (only the ARIA attributes were reviewed).
 | Any cached feed request | < 10 ms | |
 | `/api/predict`, first call | about 2 s | includes the context-catalogue download |
 | `/api/predict`, context cached | a few ms | 5-feature forward pass |
+| `/api/forecast`, history not cached | about 6 s | downloading ~8 600 global M4.5+ events (400 days) dominates |
+| `/api/forecast`, history cached | 10–25 ms | 52-week matrices, features for 131 cells, one model call |
+| `/api/anomalies`, history cached, new parameters | about 0.1 s | 648-cell test + BH; then ~3 ms from `analysis_cache` |
+| `/api/sequences?days=30`, feed not cached | about 2.8 s | USGS feed download + DBSCAN on ~1 850 events; ~8 ms when cached |
+| `/api/aftershocks`, not cached | about 2.7 s | event lookup + radius query + MLE fit; ~2 ms when cached |
 
 These timings were observed during development on one Windows laptop; they are not benchmarks. The
 original code ran ~300 single-row model inferences and a pure-Python plate-distance loop on every feed
@@ -1686,14 +2352,14 @@ is vectorised with NumPy.
 Map rendering uses Leaflet's canvas renderer (`preferCanvas`), which handles 2000 circle markers
 smoothly. The list renders at most 200 rows. Automatic refresh pauses while the tab is hidden.
 
-## 11.3 Known limitations and recommendations (not implemented)
+## 12.3 Known limitations and recommendations (not implemented)
 
 <div class="future" markdown="1"><span class="label">Not implemented</span>
 
 * **No inbound rate limiting.** A client could request every `min_mag` value in a loop. The cache bound
   limits memory, not USGS traffic. Recommendation: a small per-IP limiter, or restricting `min_mag` to
   the UI's preset values.
-* **Development server.** Use a WSGI server for any public deployment (§9.8).
+* **Development server.** Use a WSGI server for any public deployment (§10.8).
 * **Duplicate concurrent fetches.** Two simultaneous cache misses for the same key both call USGS
   (acceptable at this scale).
 * **The pickle in `scaler.pkl`** is trusted input. Storing μ and σ in JSON would remove pickle entirely.
@@ -1702,12 +2368,12 @@ smoothly. The list renders at most 200 rows. Automatic refresh pauses while the 
 * **No HTTPS** locally; required for any real deployment.
 </div>
 
-# 12 Important code walkthroughs
+# 13 Important code walkthroughs
 
 The walkthroughs follow execution order: configuration, server start, data fetching, features and model,
 an API route, then the browser.
 
-## 12.1 config.py
+## 13.1 config.py
 
 **Purpose.** A single place for every tunable value.
 
@@ -1731,16 +2397,19 @@ TECTONIC_FILE = os.path.join(BASE_DIR, "data", "tectonic_plates.geojson")
   * Tests that monkeypatch a config value (for example `config.MAX_EVENTS`) must patch `config.X`, not a
     copy imported elsewhere with `from config import X`.
 
-## 12.2 app.py: start-up and a route
+## 13.2 app.py: start-up and a route
 
 **Purpose.** Wire everything together and expose HTTP.
 
 <!-- src: app.py -->
 ```python
-def earthquakes():
+def feed_params():
     days = parse_number("days", default=1, lo=1, hi=config.MAX_DAYS, cast=int)
     min_mag = round(parse_number("min_mag", default=2.5, lo=-1.0, hi=10.0), 1)
+    return days, min_mag
 
+
+def get_feed(days, min_mag):
     def fetch():
         end = utc_now()
         start = end - timedelta(days=days)
@@ -1752,14 +2421,20 @@ def earthquakes():
                           "limit": config.MAX_EVENTS},
                 "fetched_at": iso(end), **stats}
 
-    payload, cache = cached_fetch(("feed", days, min_mag), config.FEED_CACHE_TTL, fetch)
+    return cached_fetch(("feed", days, min_mag), config.FEED_CACHE_TTL, fetch)
+
+
+@app.route("/api/earthquakes")
+def earthquakes():
+    payload, cache = get_feed(*feed_params())
     return jsonify({**payload, "source": SOURCE_NAME, "cache": cache})
 ```
 
 Line by line:
 
-* Lines 2–3 validate and normalise the inputs. Rounding `min_mag` to 0.1 bounds the number of distinct
-  cache keys.
+* `feed_params` validates and normalises the inputs. Rounding `min_mag` to 0.1 bounds the number of
+  distinct cache keys. The feed is split out of the route because `/api/sequences` clusters exactly the
+  same cached feed: both endpoints share one download per `(days, min_mag)`.
 * `fetch` is a **closure**: it captures `days` and `min_mag`, and `cached_fetch` calls it only on a miss.
   The time window is computed *inside* `fetch`, so a cached payload keeps the window it was actually
   fetched for.
@@ -1775,11 +2450,11 @@ Line by line:
 * An exactly-2000-event result is reported as truncated, with `total_available` = 2000. That is
   conservative and correct.
 
-## 12.3 usgs_client.fetch_events
+## 13.3 usgs_client.fetch_events
 
 <!-- src: usgs_client.py -->
 ```python
-def fetch_events(start, end, min_mag=None, limit=None, timeout=None, retries=None, session=None):
+def fetch_events(start, end, min_mag=None, limit=None, timeout=None, retries=None, session=None, circle=None):
     """Fetch and normalise events in [start, end). Newest first."""
     params = {
         "format": "geojson",
@@ -1792,14 +2467,16 @@ def fetch_events(start, end, min_mag=None, limit=None, timeout=None, retries=Non
 
 * `orderby=time` returns newest first, so when `limit` truncates, the *oldest* events are dropped. That
   is what a "recent events" view needs.
-* `timeout`, `retries` and `session` are injectable: training uses `timeout=90, retries=3` for large
-  chunks, and tests could pass a fake session.
+* `timeout`, `retries` and `session` are injectable: the historical download uses `timeout=120, retries=4`
+  for large chunks, and tests could pass a fake session.
+* `circle=(lat, lon, radius_km)` adds the FDSN great-circle search (`latitude`, `longitude`, `maxradiuskm`)
+  used by the aftershock module. USGS does the radius filter server-side, so only nearby events are downloaded.
 * Passing `params=` to `requests` URL-encodes the values. Building URLs with f-strings (as the original
   code did) risks encoding bugs.
 * **Common mistake:** formatting timestamps without a timezone conversion. `_iso()` calls
   `astimezone(timezone.utc)` first.
 
-## 12.4 features.py and ml_model.py
+## 13.4 features.py and ml_model.py
 
 These were covered in depth in §5.6, §7.5 and §7.11. The essential point for maintenance:
 **`FEATURE_NAMES` is the contract**. To change a feature you must:
@@ -1811,7 +2488,7 @@ These were covered in depth in §5.6, §7.5 and §7.11. The essential point for 
 
 If you skip step 3, the server refuses to load the old artifacts instead of serving wrong predictions.
 
-## 12.5 dashboard.js: start-up and wiring
+## 13.5 dashboard.js: start-up and wiring
 
 <!-- src: static/dashboard.js -->
 ```javascript
@@ -1819,16 +2496,17 @@ If you skip step 3, the server refuses to load the old artifacts instead of serv
     initMap();
     bind();
     loadPlates();
-    loadModelInfo();
     refreshAll();
   });
 ```
 
-* The map is created first, so the layers exist before data arrives.
+* The map is created first, so the layers exist before data arrives. `static/ml.js` registers its own
+  `DOMContentLoaded` handler after this one (handlers run in registration order), so the map already
+  exists when the analytical views add their module layer.
 * `bind()` attaches every event listener exactly once and starts the two intervals: refresh every
   3 minutes and the freshness label every 30 seconds.
-* `loadPlates`, `loadModelInfo` and `refreshAll` (feed plus clusters) run concurrently, because none
-  waits for another. Each handles its own errors, so one failure cannot block the rest.
+* `loadPlates` and `refreshAll` (feed plus activity cells, plus the active analytical view through the
+  `refresh` hook) run concurrently. Each handles its own errors, so one failure cannot block the rest.
 
 **Common mistakes:**
 
@@ -1837,7 +2515,7 @@ If you skip step 3, the server refuses to load the old artifacts instead of serv
   are attached to freshly created elements each render, and the old elements are discarded with
   `replaceChildren`.
 
-## 12.6 train_model.main: guarding the evaluation
+## 13.6 train_model.main: guarding the evaluation
 
 <!-- src: train_model.py -->
 ```python
@@ -1858,9 +2536,9 @@ If you skip step 3, the server refuses to load the old artifacts instead of serv
 * `scaler.fit` sees only training rows. `base_rate` also comes from training only, and it is the value
   shown to users as the reference.
 
-# 13 Interview preparation
+# 14 Interview preparation
 
-## 13.1 The 30-second introduction
+## 14.1 The 30-second introduction
 
 "TerraWatcher is a real-time earthquake analytics dashboard I built with Flask and Leaflet. It pulls
 live data from the USGS earthquake API, validates and caches it, and shows events, statistics, recent
@@ -1869,7 +2547,7 @@ part I'm proudest of is how I evaluated it. I used a chronological split, made s
 future-data leakage, and compared it against baselines. It turned out to be barely better than the base
 rate, and the app says so openly instead of presenting it as a forecast."
 
-## 13.2 The two-minute technical explanation
+## 14.2 The two-minute technical explanation
 
 "The backend is a single Flask app. A client module talks to the USGS FDSN service with timeouts and a
 retry policy for rate limits and server errors. It validates every record: anything without valid
@@ -1888,7 +2566,7 @@ nearby in the previous 30 days, computed strictly from the past. I trained on 24
 logistic regression and 0.50 for the base rate, with a Brier skill of essentially zero. That's
 consistent with Gutenberg–Richter, so I present it as an exploratory component, not a predictor."
 
-## 13.3 The five-minute architecture walk-through
+## 14.3 The five-minute architecture walk-through
 
 Use Figure 1 and cover, in order:
 
@@ -1904,9 +2582,9 @@ Use Figure 1 and cover, in order:
 5. **The evaluation story** (Figures 9–10). The leakage you fixed, the chronological split, the
    baselines, the honest result.
 6. **Trade-offs.** No marker clustering (canvas is enough at 2000 points), in-process cache, dev server,
-   and what you would change for production (Chapter 14).
+   and what you would change for production (Chapter 15).
 
-## 13.4 Model, features, evaluation and leakage
+## 14.4 Model, features, evaluation and leakage
 
 <div class="qa" markdown="1">
 **Q1. What exactly does your model predict?**
@@ -1992,7 +2670,7 @@ has to be in `eval()` mode. In training mode, a single-row request can't be norm
 `model.eval()`, and a test checks that single-row and batch predictions match.
 </div>
 
-## 13.5 API design, async requests, geospatial rendering and errors
+## 14.5 API design, async requests, geospatial rendering and errors
 
 <div class="qa" markdown="1">
 **Q11. Describe your API error contract.**
@@ -2068,7 +2746,7 @@ would let it through. `parse_number` explicitly rejects non-finite values. There
 with `lat=nan&lon=inf`.
 </div>
 
-## 13.6 Defects discovered and fixed during the engineering audit
+## 14.6 Defects discovered and fixed during the engineering audit
 
 <div class="qa" markdown="1">
 **Q20. What was the most surprising bug you found?**
@@ -2118,14 +2796,14 @@ pins, retrained under the new versions (with identical metrics, because training
 verified in a fresh clone with a new venv. The audit is now clean.
 </div>
 
-## 13.7 Architecture trade-offs, reliability and scalability
+## 14.7 Architecture trade-offs, reliability and scalability
 
 <div class="qa" markdown="1">
 **Q26. Why no database?**
 
 There's nothing to persist. Events are fetched live from the authoritative source, and reference data is
 a static file. A database would add migrations and operations work without a feature that needs it.
-Historical analysis beyond 30 days would justify one (Chapter 14).
+Historical analysis beyond 30 days would justify one (Chapter 15).
 </div>
 
 <div class="qa" markdown="1">
@@ -2158,7 +2836,7 @@ Scientifically, the model has almost no skill. Operationally, it runs on the dev
 inbound rate limiting, and depends on CDNs for the map library and tiles.
 </div>
 
-## 13.8 Challenging the scientific validity
+## 14.8 Challenging the scientific validity
 
 <div class="qa" markdown="1">
 **Q31. "So your app predicts earthquakes?"**
@@ -2192,7 +2870,7 @@ proper scoring rules, and consistently beating standard references like ETAS acr
 periods, ideally verified independently, as in the CSEP testing centres.
 </div>
 
-# 14 Extension roadmap
+# 15 Extension roadmap
 
 Each item is a **proposal**, not an implemented feature. They are ordered by value relative to effort.
 
@@ -2229,7 +2907,7 @@ geographic generalisation. *Approach:* drop 30 days around each split boundary; 
 *Approach:* a periodic download into SQLite with indexes on time and location; new endpoints with
 pagination. *Limitation:* adds storage and a refresh job, the first real reason for a database.
 
-**6. Browser E2E tests.** *Benefit:* automates the manual acceptance checks in §10.4. *Approach:*
+**6. Browser E2E tests.** *Benefit:* automates the manual acceptance checks in §11.4. *Approach:*
 Playwright with route interception to fake `/api/*`. *Limitation:* adds a Node dependency and CI time.
 
 **7. Deployment hardening.** A WSGI server, HTTPS via a reverse proxy, a per-IP limiter and restricted
@@ -2247,9 +2925,9 @@ still be research-grade, not an operational forecast.
 Infrastructure such as Kubernetes, message queues or microservices is deliberately **not** on this list:
 nothing in the current workload needs it.
 
-# 15 Quick reference and glossary
+# 16 Quick reference and glossary
 
-## 15.1 Glossary
+## 16.1 Glossary
 
 | Term | Meaning |
 |---|---|
@@ -2273,7 +2951,7 @@ nothing in the current workload needs it.
 | TTL | Time to live: how long a cache entry counts as fresh |
 | Web Mercator | The map projection used by Leaflet tiles (EPSG:3857) |
 
-## 15.2 Key files
+## 16.2 Key files
 
 | File | One-line role |
 |---|---|
@@ -2287,7 +2965,7 @@ nothing in the current workload needs it.
 | `static/dashboard.js` | UI state, networking, map and rendering |
 | `model_meta.json` | Schema + metrics written by training, read by the server and the UI |
 
-## 15.3 API summary
+## 16.3 API summary
 
 | Method and path | Key parameters | Returns |
 |---|---|---|
@@ -2295,10 +2973,15 @@ nothing in the current workload needs it.
 | `GET /api/hotspots` | `limit` 1–50 | observed 2° activity clusters |
 | `GET /api/predict` | `lat`, `lon`/`lng`, `depth` | conditional severity score + features |
 | `GET /api/model-info` | — | schema, training, metrics, baselines |
-| `GET /api/health` | — | readiness |
+| `GET /api/health` | — | readiness, per module |
 | `GET /api/plates` | — | plate-boundary GeoJSON |
+| `GET /api/sequences` | feed params + `eps_km`, `eps_hours`, `min_samples` | detected sequences + assignments |
+| `GET /api/forecast[/<cell>]` | `threshold` 4.5 / 5.0 | 7-day expected counts, intervals, baselines (+ history, features, backtest) |
+| `GET /api/anomalies[/<cell>]` | `threshold`, `window_weeks`, `reference_weeks`, `fdr` | per-cell status, observed vs expected, p, q (+ weekly counts, events) |
+| `GET /api/aftershocks` | `event_id`, `radius_km`, `pre_days`, `post_days`, `min_mag`, depths, `fit_start_hours` | statistics, Omori–Utsu fit or reasons, members |
+| `GET /api/model-performance` | — | every module's evaluation results |
 
-## 15.4 Common commands
+## 16.4 Common commands
 
 | Task | Command |
 |---|---|
@@ -2306,13 +2989,16 @@ nothing in the current workload needs it.
 | Run | `python app.py` |
 | Python tests | `python -m pytest -q` |
 | Frontend tests | `node --test "tests/frontend/*.test.js"` |
-| Retrain (download) | `python train_model.py` |
-| Retrain (cached CSV) | `python train_model.py --offline` |
+| Download the 2000–now catalogue | `python ml_pipeline.py download` |
+| Train/evaluate all analytical modules | `python ml_pipeline.py all` |
+| One module | `python ml_pipeline.py forecast` (or `anomaly`, `sequences`, `aftershock`, `report`) |
+| Retrain the legacy classifier | `python train_model.py` (or `--offline`) |
+| Lint (tool venv) | `ruff check .` |
 | Health | `curl http://127.0.0.1:5000/api/health` |
 | Build this guide | `pip install -r requirements-docs.txt` then `python docs/build_guide.py` |
 | Check guide excerpts only | `python docs/build_guide.py --check` |
 
-## 15.5 Architecture in one paragraph
+## 16.5 Architecture in one paragraph
 
 A single Flask process serves a static Leaflet dashboard and a JSON API. It fetches events from the
 USGS FDSN service with timeouts and retries, validates and de-duplicates them, and caches them for 60 s
@@ -2321,7 +3007,7 @@ browser re-validates responses, filters by depth locally, and renders canvas mar
 statistics. A PyTorch MLP, loaded once at start-up with schema checks, scores hypothetical M4.5+ events
 using five causal features shared with the offline training script.
 
-## 15.6 Model assumptions and limitations
+## 16.6 Model assumptions and limitations
 
 * The score is conditional on an M4.5+ event occurring; it is not a probability of occurrence.
 * Test ROC-AUC 0.570; Brier skill +0.006 against the base rate: little practical value.
@@ -2329,18 +3015,22 @@ using five causal features shared with the offline training script.
 * Magnitude types are mixed; the catalogue is revised over time.
 * Plate distance is approximate and the boundary data dates from 1987.
 
-## 15.7 Demonstration checklist
+## 16.7 Demonstration checklist
 
 <ul class="checklist">
-<li>Run <code>python -m pytest -q</code> before the demo (91 passed) and start <code>python app.py</code>.</li>
+<li>Run <code>python -m pytest -q</code> before the demo (188 passed) and start <code>python app.py</code>.</li>
 <li>Open the dashboard; point out the "Live / Fresh" status and the fetch time.</li>
 <li>Switch 24 h → 7 days → 30 days; show the count and the "newest 2000 of N" truncation note at M 0+.</li>
 <li>Apply the "Deep" filter; explain that it is client-side.</li>
 <li>Select a large event; open its USGS page from the detail panel.</li>
 <li>Toggle plate boundaries and activity clusters; open a cluster popup and read the "not a forecast" note.</li>
 <li>Click the map near a subduction zone; explain the conditional score and the base-rate comparison.</li>
-<li>Open the model card; state the honest metrics without being asked.</li>
-<li>Show <code>docs/model_evaluation.md</code> and the chronological split.</li>
+<li>Sequence Explorer at 30 days: select the largest sequence, read why its events were grouped, then hand it to Aftershock Analysis.</li>
+<li>Activity Forecasts: pick the busiest cell; compare the forecast with its baselines and show the out-of-sample backtest line.</li>
+<li>Anomaly Detection: open the flagged cell, read the explanation and the q-value, and say what "elevated" does not mean.</li>
+<li>Aftershock Analysis: show the log–log rate plot, the fit diagnostics, and an event whose fit is rejected (and why).</li>
+<li>Model Performance: state validation vs test, the baseline comparison and the cells where the model is worse, without being asked.</li>
+<li>Show <code>docs/ml_evaluation.md</code> and run <code>python ml_pipeline.py report</code> to show it is generated.</li>
 <li>If asked about failures: start a second instance with a bad <code>TERRAWATCHER_USGS_URL</code> and show the error state.</li>
-<li>Close with what you would do next (Chapter 14), labelled as future work.</li>
+<li>Close with what you would do next (Chapter 15), labelled as future work.</li>
 </ul>

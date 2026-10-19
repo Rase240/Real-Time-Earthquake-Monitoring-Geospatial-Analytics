@@ -1,0 +1,412 @@
+{
+ "overlapping_sequences_vs_eps_km": [
+  {
+   "eps_km": 10.0,
+   "ari_mean": 0.5815
+  },
+  {
+   "eps_km": 15.0,
+   "ari_mean": 0.8174
+  },
+  {
+   "eps_km": 25.0,
+   "ari_mean": 0.2
+  },
+  {
+   "eps_km": 50.0,
+   "ari_mean": 0.0
+  }
+ ],
+ "generated_at": "2026-10-19T01:31:51Z",
+ "data": "synthetic (clearly labelled); never shown as real catalogue events",
+ "parameters": {
+  "eps_km": 50.0,
+  "eps_hours": 72.0,
+  "min_samples": 4
+ },
+ "seeds": [
+  0,
+  1,
+  2,
+  3,
+  4
+ ],
+ "scenarios": {
+  "dense_clusters_with_noise": {
+   "proposed": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     5,
+     5,
+     5,
+     5,
+     5
+    ],
+    "true_sequences": 5,
+    "noise_recall_mean": 1.0
+   },
+   "naive_degrees": {
+    "ari_mean": 0.9977,
+    "ari_min": 0.9883,
+    "nmi_mean": 0.9976,
+    "found_sequences": [
+     5,
+     5,
+     5,
+     5,
+     5
+    ],
+    "true_sequences": 5,
+    "noise_recall_mean": 1.0
+   },
+   "space_only": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     5,
+     5,
+     5,
+     5,
+     5
+    ],
+    "true_sequences": 5,
+    "noise_recall_mean": 1.0
+   },
+   "data_quality_last_seed": {
+    "dropped_invalid": 0,
+    "duplicates_removed": 0
+   }
+  },
+  "simultaneous_separated": {
+   "proposed": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     2,
+     2,
+     2,
+     2,
+     2
+    ],
+    "true_sequences": 2
+   },
+   "naive_degrees": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     2,
+     2,
+     2,
+     2,
+     2
+    ],
+    "true_sequences": 2
+   },
+   "space_only": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     2,
+     2,
+     2,
+     2,
+     2
+    ],
+    "true_sequences": 2
+   },
+   "data_quality_last_seed": {
+    "dropped_invalid": 0,
+    "duplicates_removed": 0
+   }
+  },
+  "same_place_separated_in_time": {
+   "proposed": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     2,
+     2,
+     2,
+     2,
+     2
+    ],
+    "true_sequences": 2
+   },
+   "naive_degrees": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     2,
+     2,
+     2,
+     2,
+     2
+    ],
+    "true_sequences": 2
+   },
+   "space_only": {
+    "ari_mean": 0.0,
+    "ari_min": 0.0,
+    "nmi_mean": 0.0,
+    "found_sequences": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "true_sequences": 2
+   },
+   "data_quality_last_seed": {
+    "dropped_invalid": 0,
+    "duplicates_removed": 0
+   }
+  },
+  "overlapping_sequences": {
+   "proposed": {
+    "ari_mean": 0.0,
+    "ari_min": 0.0,
+    "nmi_mean": 0.0,
+    "found_sequences": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "true_sequences": 2
+   },
+   "naive_degrees": {
+    "ari_mean": 0.0,
+    "ari_min": 0.0,
+    "nmi_mean": 0.0,
+    "found_sequences": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "true_sequences": 2
+   },
+   "space_only": {
+    "ari_mean": 0.0,
+    "ari_min": 0.0,
+    "nmi_mean": 0.0,
+    "found_sequences": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "true_sequences": 2
+   },
+   "data_quality_last_seed": {
+    "dropped_invalid": 0,
+    "duplicates_removed": 0
+   }
+  },
+  "antimeridian": {
+   "proposed": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "true_sequences": 1,
+    "noise_recall_mean": 1.0
+   },
+   "naive_degrees": {
+    "ari_mean": 0.8137,
+    "ari_min": 0.7856,
+    "nmi_mean": 0.8208,
+    "found_sequences": [
+     1,
+     2,
+     2,
+     2,
+     2
+    ],
+    "true_sequences": 1,
+    "noise_recall_mean": 1.0
+   },
+   "space_only": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "true_sequences": 1,
+    "noise_recall_mean": 1.0
+   },
+   "data_quality_last_seed": {
+    "dropped_invalid": 0,
+    "duplicates_removed": 0
+   }
+  },
+  "high_latitude": {
+   "proposed": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     2,
+     2,
+     2,
+     2,
+     2
+    ],
+    "true_sequences": 2,
+    "noise_recall_mean": 1.0
+   },
+   "naive_degrees": {
+    "ari_mean": 0.4739,
+    "ari_min": 0.4097,
+    "nmi_mean": 0.6227,
+    "found_sequences": [
+     1,
+     1,
+     3,
+     2,
+     2
+    ],
+    "true_sequences": 2,
+    "noise_recall_mean": 1.0
+   },
+   "space_only": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     2,
+     2,
+     2,
+     2,
+     2
+    ],
+    "true_sequences": 2,
+    "noise_recall_mean": 1.0
+   },
+   "data_quality_last_seed": {
+    "dropped_invalid": 0,
+    "duplicates_removed": 0
+   }
+  },
+  "duplicates_and_invalid": {
+   "proposed": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "true_sequences": 1,
+    "noise_recall_mean": 1.0
+   },
+   "naive_degrees": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "true_sequences": 1,
+    "noise_recall_mean": 1.0
+   },
+   "space_only": {
+    "ari_mean": 1.0,
+    "ari_min": 1.0,
+    "nmi_mean": 1.0,
+    "found_sequences": [
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "true_sequences": 1,
+    "noise_recall_mean": 1.0
+   },
+   "data_quality_last_seed": {
+    "dropped_invalid": 4,
+    "duplicates_removed": 10
+   }
+  }
+ },
+ "parameter_sensitivity_dense_scenario": [
+  {
+   "eps_km": 25.0,
+   "eps_hours": 24.0,
+   "ari_mean": 0.951
+  },
+  {
+   "eps_km": 25.0,
+   "eps_hours": 72.0,
+   "ari_mean": 0.986
+  },
+  {
+   "eps_km": 25.0,
+   "eps_hours": 168.0,
+   "ari_mean": 0.9883
+  },
+  {
+   "eps_km": 50.0,
+   "eps_hours": 24.0,
+   "ari_mean": 0.9953
+  },
+  {
+   "eps_km": 50.0,
+   "eps_hours": 72.0,
+   "ari_mean": 1.0
+  },
+  {
+   "eps_km": 50.0,
+   "eps_hours": 168.0,
+   "ari_mean": 1.0
+  },
+  {
+   "eps_km": 100.0,
+   "eps_hours": 24.0,
+   "ari_mean": 0.9953
+  },
+  {
+   "eps_km": 100.0,
+   "eps_hours": 72.0,
+   "ari_mean": 1.0
+  },
+  {
+   "eps_km": 100.0,
+   "eps_hours": 168.0,
+   "ari_mean": 1.0
+  }
+ ],
+ "synthetic_generator": "Clusters: epicentres at half-normal great-circle distances (sigma 15 km) in uniform random directions from a centre, times centre + half-normal (sigma 24 h). Noise: uniform on the sphere over 30 days. Noise events that happen to fall inside a cluster still count as noise in the reference labels.",
+ "metrics_note": "ARI and NMI compare against the synthetic reference labels with noise as its own class. They are only meaningful because the labels are known; on the real catalogue there is no ground truth, and internal indices (e.g. silhouette) are not reported because they assume convex clusters and a defined distance for noise."
+}

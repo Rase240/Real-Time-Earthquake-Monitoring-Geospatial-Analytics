@@ -4,5 +4,6 @@ pandas>=2.2.0,<2.4.0
 numpy>=2.0.0,<2.3.0
 requests>=2.33.0,<3.0.0
 torch>=2.13.0,<2.15.0
-scikit-learn>=1.7.0,<1.8.0   # must match the version that pickled scaler.pkl
+scikit-learn>=1.7.0,<1.8.0   # must match the version that pickled scaler.pkl and models/forecast_*.joblib
+scipy>=1.14.0,<1.19.0        # NB/Poisson distributions, Omori-Utsu MLE (already required by scikit-learn)
 joblib>=1.4.0,<1.6.0

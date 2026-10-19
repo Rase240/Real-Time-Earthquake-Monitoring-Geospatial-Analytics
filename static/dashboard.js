@@ -20,7 +20,8 @@
     feed: null,           // metadata of the last successful feed response
     hotspots: [],
     selectedId: null,
-    layersOn: { events: true, clusters: true, plates: true },
+    layersOn: { events: true, clusters: true, plates: true, module: true },
+    view: 'live',         // active module tab (set by ml.js)
     map: null,
     layers: {},
     markers: new Map(),
@@ -93,7 +94,11 @@
       const c = map.getCenter();
       $('map-view').textContent = `centre ${C.formatCoord(c.lat, ((c.lng + 540) % 360) - 180)} · zoom ${map.getZoom()}`;
     });
-    map.on('click', (e) => openPointAnalysis(e.latlng.lat, ((e.latlng.lng + 540) % 360) - 180));
+    map.on('click', (e) => {
+      const lat = e.latlng.lat, lon = ((e.latlng.lng + 540) % 360) - 180;
+      if (state.view === 'live') openPointAnalysis(lat, lon);
+      else hooks.mapClick.forEach((fn) => fn(lat, lon));
+    });
     map.fire('moveend');
   }
 
@@ -158,9 +163,11 @@
 
   function applyLayerVisibility() {
     if (!state.map) return;
-    Object.entries(state.layersOn).forEach(([name, on]) => {
+    Object.entries(state.layersOn).forEach(([name, userOn]) => {
       const layer = state.layers[name];
       if (!layer) return;
+      // Observed-event and activity-cell layers belong to Live Monitor; module layers to the other views.
+      const on = userOn && (name === 'plates' || (name === 'module' ? state.view !== 'live' : state.view === 'live'));
       if (on && !state.map.hasLayer(layer)) layer.addTo(state.map);
       if (!on && state.map.hasLayer(layer)) state.map.removeLayer(layer);
     });
@@ -275,10 +282,12 @@
       </dl>
       <div class="detail-actions">
         ${e.url ? `<a class="btn-small" href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">USGS event page ↗</a>` : ''}
+        <button class="btn-small" id="detail-aftershock">Analyse activity after this event</button>
         <button class="btn-small" id="detail-score">Point analysis here</button>
       </div>`;
     $('detail-close').addEventListener('click', () => selectEvent(null));
     $('detail-score').addEventListener('click', () => openPointAnalysis(e.latitude, e.longitude, e.depth ?? 10));
+    $('detail-aftershock').addEventListener('click', () => hooks.openAftershock.forEach((fn) => fn(e.id)));
   }
 
   function selectEvent(id, { pan = false } = {}) {
@@ -288,29 +297,6 @@
     highlightSelected();
     const e = state.events.find((x) => x.id === id);
     if (e && pan && state.map) state.map.flyTo([e.latitude, e.longitude], Math.max(state.map.getZoom(), 5), { duration: 0.6 });
-  }
-
-  function renderModel(info) {
-    const chip = $('model-chip');
-    const body = $('model-body');
-    if (!info || info.status !== 'loaded') {
-      chip.textContent = 'Unavailable';
-      chip.dataset.state = 'error';
-      body.innerHTML = `<p class="muted">${esc(info?.load_error || 'Model metadata could not be retrieved.')}</p><p class="muted small">The event feed and map work without the model.</p>`;
-      return;
-    }
-    chip.textContent = 'Loaded';
-    chip.dataset.state = 'ok';
-    const t = info.metrics?.test || {};
-    const base = info.baselines?.['Constant train base rate'] || {};
-    const lr = info.baselines?.['Logistic regression (same features)'] || {};
-    body.innerHTML = `
-      <p class="small">Estimates <strong>P(M ≥ ${esc(info.label.significant_mag)} | an M ≥ ${esc(info.label.catalog_min_mag)} event is recorded)</strong> from location, depth, recent local activity and plate-boundary distance.</p>
-      <table class="mini-table"><thead><tr><th>Test period ${esc(info.split?.test?.from || '')} → ${esc(info.split?.test?.to || '')}</th><th>ROC-AUC</th><th>Brier</th></tr></thead>
-      <tbody><tr><td>MLP (served)</td><td>${esc(C.fmt(t.roc_auc, 3))}</td><td>${esc(C.fmt(t.brier, 3))}</td></tr>
-      <tr><td>Logistic regression</td><td>${esc(C.fmt(lr.roc_auc, 3))}</td><td>${esc(C.fmt(lr.brier, 3))}</td></tr>
-      <tr><td>Constant base rate</td><td>${esc(C.fmt(base.roc_auc, 3))}</td><td>${esc(C.fmt(base.brier, 3))}</td></tr></tbody></table>
-      <p class="muted small">Only marginally better than the base rate on unseen recent data. Treat scores as exploratory; this is not an earthquake forecast.</p>`;
   }
 
   // ---------------------------------------------------------------------------
@@ -344,6 +330,7 @@
       setStatus(data.cache?.stale ? 'warn' : 'ok', data.cache?.stale ? 'Showing stale data' : 'Live');
       renderFreshness();
       applyDepthFilter();
+      hooks.feed.forEach((fn) => fn(data));
     } catch (err) {
       if (err.superseded) return;
       setStatus('error', 'Feed unavailable');
@@ -372,13 +359,10 @@
     renderClusters();
   }
 
-  async function loadModelInfo() {
-    try { renderModel(await fetchJson('/api/model-info')); } catch (err) { renderModel(null); }
-  }
-
   function refreshAll() {
     loadFeed();
     loadHotspots();
+    hooks.refresh.forEach((fn) => fn());
   }
 
   // ---------------------------------------------------------------------------
@@ -459,11 +443,20 @@
     setInterval(renderFreshness, 30000);
   }
 
+  // ---------------------------------------------------------------------------
+  // Shared interface for the analytical views (static/ml.js)
+  // ---------------------------------------------------------------------------
+  const hooks = { mapClick: [], openAftershock: [], feed: [], refresh: [] };
+  window.TerraApp = {
+    state, fetchJson, toast, setStatus, applyLayerVisibility, selectEvent,
+    on(name, fn) { hooks[name].push(fn); },
+    feedParams: () => ({ days: state.days, minMag: state.minMag }),
+  };
+
   document.addEventListener('DOMContentLoaded', () => {
     initMap();
     bind();
     loadPlates();
-    loadModelInfo();
     refreshAll();
   });
 })();

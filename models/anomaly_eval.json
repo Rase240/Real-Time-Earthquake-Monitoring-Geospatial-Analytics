@@ -1,0 +1,747 @@
+{
+ "generated_at": "2026-10-19T02:06:23Z",
+ "configuration": {
+  "window_weeks": 4,
+  "reference_weeks": 52,
+  "fdr": 0.05,
+  "min_reference_events": 5,
+  "min_observed": 3,
+  "test": "conditional beta-binomial (NB2 weekly counts; the mean is removed by conditioning)",
+  "long_term_dispersion": "2001-2015 per-cell NB2 maximum likelihood"
+ },
+ "held_out_period": {
+  "from": "2020-01-06",
+  "to": "2026-10-19"
+ },
+ "held_out_real_behaviour": {
+  "M4.5_window1w": {
+   "runs": 354,
+   "region_tests": 50992,
+   "flags": 99,
+   "flag_rate_per_region_test": 0.00194,
+   "share_of_runs_with_any_flag": 0.2203,
+   "baseline_rolling_rule_flags": 1920,
+   "previous_method_flags": 77,
+   "previous_method_share_of_runs_with_any_flag": 0.1695,
+   "flag_rate_by_year": {
+    "2020": 0.00093,
+    "2021": 0.00294,
+    "2022": 0.00172,
+    "2023": 0.00189,
+    "2024": 0.00106,
+    "2025": 0.00255,
+    "2026": 0.00267
+   },
+   "regions_ever_flagged": 62,
+   "most_flagged_regions": [
+    [
+     "R+00+120",
+     6
+    ],
+    [
+     "R-30+170",
+     4
+    ],
+    [
+     "R+50-160",
+     3
+    ],
+    [
+     "R-40+170",
+     3
+    ],
+    [
+     "R-30-180",
+     3
+    ],
+    [
+     "R+50+160",
+     3
+    ],
+    [
+     "R+20+120",
+     3
+    ],
+    [
+     "R-10+120",
+     3
+    ]
+   ]
+  },
+  "M4.5_window2w": {
+   "runs": 177,
+   "region_tests": 25491,
+   "flags": 93,
+   "flag_rate_per_region_test": 0.00365,
+   "share_of_runs_with_any_flag": 0.3672,
+   "baseline_rolling_rule_flags": 1486,
+   "previous_method_flags": 74,
+   "previous_method_share_of_runs_with_any_flag": 0.3051,
+   "flag_rate_by_year": {
+    "2020": 0.00212,
+    "2021": 0.00401,
+    "2022": 0.00344,
+    "2023": 0.00351,
+    "2024": 0.00216,
+    "2025": 0.00538,
+    "2026": 0.0052
+   },
+   "regions_ever_flagged": 63,
+   "most_flagged_regions": [
+    [
+     "R+20+120",
+     4
+    ],
+    [
+     "R+00+120",
+     4
+    ],
+    [
+     "R+50-170",
+     3
+    ],
+    [
+     "R-30+170",
+     3
+    ],
+    [
+     "R-30-180",
+     3
+    ],
+    [
+     "R-40-180",
+     3
+    ],
+    [
+     "R+50+160",
+     3
+    ],
+    [
+     "R-10+120",
+     3
+    ]
+   ]
+  },
+  "M4.5_window4w": {
+   "runs": 88,
+   "region_tests": 12672,
+   "flags": 80,
+   "flag_rate_per_region_test": 0.00631,
+   "share_of_runs_with_any_flag": 0.5341,
+   "baseline_rolling_rule_flags": 1172,
+   "previous_method_flags": 70,
+   "previous_method_share_of_runs_with_any_flag": 0.4659,
+   "flag_rate_by_year": {
+    "2020": 0.00424,
+    "2021": 0.00697,
+    "2022": 0.0053,
+    "2023": 0.00702,
+    "2024": 0.00323,
+    "2025": 0.00918,
+    "2026": 0.00884
+   },
+   "regions_ever_flagged": 54,
+   "most_flagged_regions": [
+    [
+     "R+50-170",
+     3
+    ],
+    [
+     "R-30+170",
+     3
+    ],
+    [
+     "R-30-180",
+     3
+    ],
+    [
+     "R+50+160",
+     3
+    ],
+    [
+     "R-10+120",
+     3
+    ],
+    [
+     "R+00+120",
+     3
+    ],
+    [
+     "R+10-070",
+     2
+    ],
+    [
+     "R+50-180",
+     2
+    ]
+   ]
+  },
+  "M5.0_window1w": {
+   "runs": 354,
+   "region_tests": 25733,
+   "flags": 48,
+   "flag_rate_per_region_test": 0.00187,
+   "share_of_runs_with_any_flag": 0.113,
+   "baseline_rolling_rule_flags": 652,
+   "previous_method_flags": 38,
+   "previous_method_share_of_runs_with_any_flag": 0.0904,
+   "flag_rate_by_year": {
+    "2020": 0.00109,
+    "2021": 0.00278,
+    "2022": 0.00161,
+    "2023": 0.00243,
+    "2024": 0.00055,
+    "2025": 0.00253,
+    "2026": 0.00196
+   },
+   "regions_ever_flagged": 31,
+   "most_flagged_regions": [
+    [
+     "R-30+170",
+     4
+    ],
+    [
+     "R-30-180",
+     3
+    ],
+    [
+     "R-10+120",
+     3
+    ],
+    [
+     "R+20+120",
+     3
+    ],
+    [
+     "R+00+120",
+     3
+    ],
+    [
+     "R+50-180",
+     2
+    ],
+    [
+     "R+20+140",
+     2
+    ],
+    [
+     "R+50+160",
+     2
+    ]
+   ]
+  },
+  "M5.0_window2w": {
+   "runs": 177,
+   "region_tests": 12865,
+   "flags": 34,
+   "flag_rate_per_region_test": 0.00264,
+   "share_of_runs_with_any_flag": 0.1638,
+   "baseline_rolling_rule_flags": 574,
+   "previous_method_flags": 32,
+   "previous_method_share_of_runs_with_any_flag": 0.1469,
+   "flag_rate_by_year": {
+    "2020": 0.00164,
+    "2021": 0.00354,
+    "2022": 0.0016,
+    "2023": 0.00324,
+    "2024": 0.00111,
+    "2025": 0.00407,
+    "2026": 0.00319
+   },
+   "regions_ever_flagged": 24,
+   "most_flagged_regions": [
+    [
+     "R-30+170",
+     3
+    ],
+    [
+     "R-30-180",
+     3
+    ],
+    [
+     "R+20+120",
+     3
+    ],
+    [
+     "R+50-180",
+     2
+    ],
+    [
+     "R-10+120",
+     2
+    ],
+    [
+     "R-10+150",
+     2
+    ],
+    [
+     "R+00+120",
+     2
+    ],
+    [
+     "R+10-070",
+     1
+    ]
+   ]
+  },
+  "M5.0_window4w": {
+   "runs": 88,
+   "region_tests": 6393,
+   "flags": 33,
+   "flag_rate_per_region_test": 0.00516,
+   "share_of_runs_with_any_flag": 0.25,
+   "baseline_rolling_rule_flags": 511,
+   "previous_method_flags": 30,
+   "previous_method_share_of_runs_with_any_flag": 0.2273,
+   "flag_rate_by_year": {
+    "2020": 0.00109,
+    "2021": 0.00908,
+    "2022": 0.00107,
+    "2023": 0.00757,
+    "2024": 0.00222,
+    "2025": 0.0092,
+    "2026": 0.00538
+   },
+   "regions_ever_flagged": 23,
+   "most_flagged_regions": [
+    [
+     "R-30+170",
+     3
+    ],
+    [
+     "R-30-180",
+     3
+    ],
+    [
+     "R-40-180",
+     2
+    ],
+    [
+     "R+50+160",
+     2
+    ],
+    [
+     "R-10+120",
+     2
+    ],
+    [
+     "R+30+140",
+     2
+    ],
+    [
+     "R+00+120",
+     2
+    ],
+    [
+     "R+20+120",
+     2
+    ]
+   ]
+  }
+ },
+ "held_out_note": "Real flags are not verified anomalies: there is no ground-truth label. These numbers describe how often and where the detector fires on unseen periods.",
+ "null_simulation": {
+  "simulated_runs": 2000,
+  "regions_per_run": 140,
+  "region_tests": 259250,
+  "false_alert_rate_per_region_test": 0.000459,
+  "share_of_runs_with_any_false_alert": 0.056,
+  "share_of_runs_with_any_false_alert_se": 0.0051,
+  "share_of_runs_with_any_false_alert_first_200_runs": 0.045,
+  "unadjusted_p_below_0.05_rate": 0.02901,
+  "baseline_rolling_rule_false_alert_rate": 0.101968,
+  "regions_with_most_false_alerts": [
+   {
+    "region": "R-20+160",
+    "false_alerts": 10,
+    "true_alpha_2016_2019": 2.759,
+    "long_term_alpha_2001_2015": 0.833,
+    "weekly_mean_2016_2019": 6.378
+   },
+   {
+    "region": "R-60-040",
+    "false_alerts": 9,
+    "true_alpha_2016_2019": 36.64,
+    "long_term_alpha_2001_2015": 9.221,
+    "weekly_mean_2016_2019": 1.191
+   },
+   {
+    "region": "R-40+170",
+    "false_alerts": 8,
+    "true_alpha_2016_2019": 19.166,
+    "long_term_alpha_2001_2015": 0.507,
+    "weekly_mean_2016_2019": 1.287
+   },
+   {
+    "region": "R+00-040",
+    "false_alerts": 7,
+    "true_alpha_2016_2019": 9.625,
+    "long_term_alpha_2001_2015": 2.399,
+    "weekly_mean_2016_2019": 0.522
+   },
+   {
+    "region": "R-10+140",
+    "false_alerts": 6,
+    "true_alpha_2016_2019": 4.276,
+    "long_term_alpha_2001_2015": 0.332,
+    "weekly_mean_2016_2019": 4.096
+   },
+   {
+    "region": "R+30+130",
+    "false_alerts": 6,
+    "true_alpha_2016_2019": 6.095,
+    "long_term_alpha_2001_2015": 0.942,
+    "weekly_mean_2016_2019": 1.56
+   }
+  ],
+  "construction": "Independent weekly NB counts per region with mean and variance from 2016-2019 (M4.5); the detector's long-term dispersion comes from 2001-2015. With every region null, BH at FDR 0.05 should leave at most ~5% of runs with any flag. Real catalogues are clustered, so real false-alert rates can differ."
+ },
+ "synthetic_injection": {
+  "+0.5x_expected": {
+   "trials": 12592,
+   "detection_rate": 0.0014,
+   "unadjusted_p_below_0.05_rate": 0.0559,
+   "baseline_rolling_rule_detection_rate": 0.1832
+  },
+  "+1x_expected": {
+   "trials": 12592,
+   "detection_rate": 0.0039,
+   "unadjusted_p_below_0.05_rate": 0.1105,
+   "baseline_rolling_rule_detection_rate": 0.3154
+  },
+  "+2x_expected": {
+   "trials": 12592,
+   "detection_rate": 0.0334,
+   "unadjusted_p_below_0.05_rate": 0.2809,
+   "baseline_rolling_rule_detection_rate": 0.7272
+  },
+  "+4x_expected": {
+   "trials": 12592,
+   "detection_rate": 0.1506,
+   "unadjusted_p_below_0.05_rate": 0.6047,
+   "baseline_rolling_rule_detection_rate": 0.9085
+  }
+ },
+ "injection_construction": "In every non-overlapping held-out window (M4.5, 4-week observation), each tested region not already flagged gets ceil(factor x expected) extra events in its last observation week, one region at a time; detection = flagged after BH across all regions.",
+ "method_comparison": {
+  "adopted": "conditional_mle_floor",
+  "variants": {
+   "previous_plugin_moment_floor": {
+    "description": "Previous method: NB with the estimated mean; floor = 2001-2015 moment dispersion.",
+    "null_runs_with_false_alert": 0.1365,
+    "null_runs_with_false_alert_first_200_runs": 0.12,
+    "null_false_alert_rate_per_region_test": 0.001223,
+    "injection_validation_2016_2019": {
+     "trials": 7216,
+     "+0.5x_expected": 0.0012,
+     "+1x_expected": 0.0026,
+     "+2x_expected": 0.0157,
+     "+4x_expected": 0.0973
+    },
+    "injection_held_out": {
+     "trials": 12602,
+     "+0.5x_expected": 0.0011,
+     "+1x_expected": 0.0021,
+     "+2x_expected": 0.0156,
+     "+4x_expected": 0.0913
+    },
+    "held_out_M4_5_window4w": {
+     "flags": 70,
+     "share_of_runs_with_any_flag": 0.4659,
+     "regions_ever_flagged": 51
+    }
+   },
+   "plugin_mle_floor": {
+    "description": "NB with the estimated mean; floor = 2001-2015 per-cell maximum-likelihood dispersion.",
+    "null_runs_with_false_alert": 0.19,
+    "null_runs_with_false_alert_first_200_runs": 0.155,
+    "null_false_alert_rate_per_region_test": 0.001801,
+    "injection_validation_2016_2019": {
+     "trials": 7193,
+     "+0.5x_expected": 0.0015,
+     "+1x_expected": 0.0056,
+     "+2x_expected": 0.047,
+     "+4x_expected": 0.1843
+    },
+    "injection_held_out": {
+     "trials": 12568,
+     "+0.5x_expected": 0.0025,
+     "+1x_expected": 0.0053,
+     "+2x_expected": 0.0435,
+     "+4x_expected": 0.1809
+    },
+    "held_out_M4_5_window4w": {
+     "flags": 104,
+     "share_of_runs_with_any_flag": 0.5795,
+     "regions_ever_flagged": 69
+    }
+   },
+   "plugin_empirical_q99_floor": {
+    "description": "Empirical null: NB with the estimated mean; floor = smallest alpha whose 4-week total reaches the cell's 2001-2015 99th-percentile 4-week count with probability >= 1%.",
+    "null_runs_with_false_alert": 0.1265,
+    "null_runs_with_false_alert_first_200_runs": 0.105,
+    "null_false_alert_rate_per_region_test": 0.001099,
+    "injection_validation_2016_2019": {
+     "trials": 7223,
+     "+0.5x_expected": 0.0007,
+     "+1x_expected": 0.0015,
+     "+2x_expected": 0.012,
+     "+4x_expected": 0.0476
+    },
+    "injection_held_out": {
+     "trials": 12614,
+     "+0.5x_expected": 0.0013,
+     "+1x_expected": 0.0021,
+     "+2x_expected": 0.0122,
+     "+4x_expected": 0.0492
+    },
+    "held_out_M4_5_window4w": {
+     "flags": 58,
+     "share_of_runs_with_any_flag": 0.4205,
+     "regions_ever_flagged": 47
+    }
+   },
+   "plugin_empirical_q95_floor": {
+    "description": "Empirical null as above, fitted at the 95th percentile.",
+    "null_runs_with_false_alert": 0.2235,
+    "null_runs_with_false_alert_first_200_runs": 0.185,
+    "null_false_alert_rate_per_region_test": 0.002199,
+    "injection_validation_2016_2019": {
+     "trials": 7189,
+     "+0.5x_expected": 0.0046,
+     "+1x_expected": 0.0095,
+     "+2x_expected": 0.0463,
+     "+4x_expected": 0.223
+    },
+    "injection_held_out": {
+     "trials": 12544,
+     "+0.5x_expected": 0.0038,
+     "+1x_expected": 0.0073,
+     "+2x_expected": 0.0448,
+     "+4x_expected": 0.223
+    },
+    "held_out_M4_5_window4w": {
+     "flags": 128,
+     "share_of_runs_with_any_flag": 0.6477,
+     "regions_ever_flagged": 87
+    }
+   },
+   "conditional_moment_floor": {
+    "description": "Conditional beta-binomial test; floor = 2001-2015 moment dispersion.",
+    "null_runs_with_false_alert": 0.0345,
+    "null_runs_with_false_alert_first_200_runs": 0.035,
+    "null_false_alert_rate_per_region_test": 0.000285,
+    "injection_validation_2016_2019": {
+     "trials": 7229,
+     "+0.5x_expected": 0.0007,
+     "+1x_expected": 0.0014,
+     "+2x_expected": 0.0108,
+     "+4x_expected": 0.0671
+    },
+    "injection_held_out": {
+     "trials": 12630,
+     "+0.5x_expected": 0.0012,
+     "+1x_expected": 0.0017,
+     "+2x_expected": 0.0117,
+     "+4x_expected": 0.0626
+    },
+    "held_out_M4_5_window4w": {
+     "flags": 42,
+     "share_of_runs_with_any_flag": 0.3523,
+     "regions_ever_flagged": 35
+    }
+   },
+   "conditional_mle_floor": {
+    "description": "Adopted: conditional beta-binomial test; floor = 2001-2015 per-cell maximum-likelihood dispersion.",
+    "null_runs_with_false_alert": 0.056,
+    "null_runs_with_false_alert_first_200_runs": 0.045,
+    "null_false_alert_rate_per_region_test": 0.000459,
+    "injection_validation_2016_2019": {
+     "trials": 7206,
+     "+0.5x_expected": 0.0008,
+     "+1x_expected": 0.0035,
+     "+2x_expected": 0.0351,
+     "+4x_expected": 0.1549
+    },
+    "injection_held_out": {
+     "trials": 12592,
+     "+0.5x_expected": 0.0014,
+     "+1x_expected": 0.0039,
+     "+2x_expected": 0.0334,
+     "+4x_expected": 0.1506
+    },
+    "held_out_M4_5_window4w": {
+     "flags": 80,
+     "share_of_runs_with_any_flag": 0.5341,
+     "regions_ever_flagged": 54
+    }
+   },
+   "oracle_true_alpha_estimated_mean": {
+    "description": "Diagnostic: the simulation's true 2016-2019 dispersion, mean estimated from the reference window (plug-in NB).",
+    "null_runs_with_false_alert": 0.113,
+    "null_runs_with_false_alert_first_200_runs": 0.115,
+    "null_false_alert_rate_per_region_test": 0.001049
+   },
+   "oracle_true_alpha_and_mean": {
+    "description": "Diagnostic: the simulation's true 2016-2019 dispersion and mean.",
+    "null_runs_with_false_alert": 0.0355,
+    "null_runs_with_false_alert_first_200_runs": 0.045,
+    "null_false_alert_rate_per_region_test": 0.000285
+   }
+  },
+  "floor_quartiles_null_regions": {
+   "moment": [
+    1.957,
+    4.435,
+    10.782
+   ],
+   "mle": [
+    1.038,
+    2.376,
+    4.59
+   ],
+   "q99": [
+    2.198,
+    5.207,
+    13.636
+   ],
+   "q95": [
+    0.0,
+    0.607,
+    1.511
+   ]
+  },
+  "note": "All variants see the same null runs and injection trials (M4.5, 4-week window, 52-week reference). Selection used the null simulation and the 2016-2019 injection only; held-out columns were computed afterwards. Floor quartiles: 25/50/75th percentiles of each 2001-2015 weekly dispersion table over the regions in the null simulation."
+ },
+ "null_simulation_by_setting": [
+  {
+   "threshold": 4.5,
+   "window_weeks": 1,
+   "reference_weeks": 26,
+   "regions": 106,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.103,
+   "conditional_moment_floor_runs_with_false_alert": 0.033,
+   "conditional_mle_floor_runs_with_false_alert": 0.073
+  },
+  {
+   "threshold": 4.5,
+   "window_weeks": 1,
+   "reference_weeks": 52,
+   "regions": 140,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.076,
+   "conditional_moment_floor_runs_with_false_alert": 0.028,
+   "conditional_mle_floor_runs_with_false_alert": 0.044
+  },
+  {
+   "threshold": 4.5,
+   "window_weeks": 2,
+   "reference_weeks": 26,
+   "regions": 106,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.134,
+   "conditional_moment_floor_runs_with_false_alert": 0.04,
+   "conditional_mle_floor_runs_with_false_alert": 0.076
+  },
+  {
+   "threshold": 4.5,
+   "window_weeks": 2,
+   "reference_weeks": 52,
+   "regions": 140,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.111,
+   "conditional_moment_floor_runs_with_false_alert": 0.039,
+   "conditional_mle_floor_runs_with_false_alert": 0.065
+  },
+  {
+   "threshold": 4.5,
+   "window_weeks": 4,
+   "reference_weeks": 26,
+   "regions": 106,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.198,
+   "conditional_moment_floor_runs_with_false_alert": 0.042,
+   "conditional_mle_floor_runs_with_false_alert": 0.081
+  },
+  {
+   "threshold": 4.5,
+   "window_weeks": 4,
+   "reference_weeks": 52,
+   "regions": 140,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.152,
+   "conditional_moment_floor_runs_with_false_alert": 0.037,
+   "conditional_mle_floor_runs_with_false_alert": 0.063
+  },
+  {
+   "threshold": 5.0,
+   "window_weeks": 1,
+   "reference_weeks": 26,
+   "regions": 38,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.063,
+   "conditional_moment_floor_runs_with_false_alert": 0.024,
+   "conditional_mle_floor_runs_with_false_alert": 0.046
+  },
+  {
+   "threshold": 5.0,
+   "window_weeks": 1,
+   "reference_weeks": 52,
+   "regions": 65,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.056,
+   "conditional_moment_floor_runs_with_false_alert": 0.019,
+   "conditional_mle_floor_runs_with_false_alert": 0.04
+  },
+  {
+   "threshold": 5.0,
+   "window_weeks": 2,
+   "reference_weeks": 26,
+   "regions": 38,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.068,
+   "conditional_moment_floor_runs_with_false_alert": 0.023,
+   "conditional_mle_floor_runs_with_false_alert": 0.047
+  },
+  {
+   "threshold": 5.0,
+   "window_weeks": 2,
+   "reference_weeks": 52,
+   "regions": 65,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.063,
+   "conditional_moment_floor_runs_with_false_alert": 0.024,
+   "conditional_mle_floor_runs_with_false_alert": 0.044
+  },
+  {
+   "threshold": 5.0,
+   "window_weeks": 4,
+   "reference_weeks": 26,
+   "regions": 38,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.094,
+   "conditional_moment_floor_runs_with_false_alert": 0.028,
+   "conditional_mle_floor_runs_with_false_alert": 0.065
+  },
+  {
+   "threshold": 5.0,
+   "window_weeks": 4,
+   "reference_weeks": 52,
+   "regions": 65,
+   "runs": 1000,
+   "previous_plugin_moment_floor_runs_with_false_alert": 0.08,
+   "conditional_moment_floor_runs_with_false_alert": 0.028,
+   "conditional_mle_floor_runs_with_false_alert": 0.051
+  }
+ ],
+ "missing_data": {
+  "global_zero_event_days_2000_to_end": 0,
+  "zero_event_days": [],
+  "removal_trials": 60,
+  "days_removed_per_trial": 3,
+  "gap_check_detected_all_removed_days_share": 1.0,
+  "mean_share_of_flags_lost_when_3_days_missing": 0.099,
+  "note": "Removing whole days lowers observed counts, so some elevated regions are missed; the gap check reports those windows as data_incomplete instead of normal."
+ }
+}

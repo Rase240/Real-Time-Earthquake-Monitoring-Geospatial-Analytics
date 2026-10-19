@@ -35,6 +35,7 @@ MODEL_FILE = os.path.join(BASE_DIR, "earthquake_model_v1.pth")
 SCALER_FILE = os.path.join(BASE_DIR, "scaler.pkl")
 MODEL_META_FILE = os.path.join(BASE_DIR, "model_meta.json")
 TECTONIC_FILE = os.path.join(BASE_DIR, "data", "tectonic_plates.geojson")
+MODEL_DIR = os.environ.get("TERRAWATCHER_MODEL_DIR", os.path.join(BASE_DIR, "models"))
 
 # --- Upstream: USGS FDSN event web service -----------------------------------
 USGS_BASE_URL = os.environ.get(
@@ -50,3 +51,13 @@ FEED_CACHE_TTL = _env_int("TERRAWATCHER_FEED_CACHE_TTL", 60)        # seconds
 CONTEXT_CACHE_TTL = _env_int("TERRAWATCHER_CONTEXT_CACHE_TTL", 600)  # seconds
 STALE_MAX_AGE = _env_int("TERRAWATCHER_STALE_MAX_AGE", 1800)        # serve stale copy up to this age
 CACHE_MAX_ENTRIES = 32
+
+# --- Analytical modules --------------------------------------------------------
+# One global M4.5+ download covers the forecast features (52 weeks) and the
+# anomaly reference + observation windows (up to 56 weeks) with margin.
+HISTORY_DAYS = 400
+HISTORY_CACHE_TTL = _env_int("TERRAWATCHER_HISTORY_CACHE_TTL", 3600)        # seconds
+HISTORY_STALE_MAX_AGE = _env_int("TERRAWATCHER_HISTORY_STALE_MAX_AGE", 21600)
+AFTERSHOCK_CACHE_TTL = _env_int("TERRAWATCHER_AFTERSHOCK_CACHE_TTL", 600)
+ANALYSIS_CACHE_MAX_ENTRIES = 64
+USGS_QUERY_LIMIT = 20000   # FDSN maximum per query; reaching it means the result is truncated

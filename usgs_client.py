@@ -166,7 +166,16 @@ def normalize_collection(payload):
     return events, {"dropped_invalid": dropped, "duplicates_removed": duplicates}
 
 
-def fetch_events(start, end, min_mag=None, limit=None, timeout=None, retries=None, session=None):
+def _circle_params(params, circle):
+    """circle = (latitude, longitude, max_radius_km): FDSN great-circle radius search."""
+    if circle is not None:
+        lat, lon, radius_km = circle
+        params.update({"latitude": round(float(lat), 4), "longitude": round(float(lon), 4),
+                       "maxradiuskm": round(float(radius_km), 1)})
+    return params
+
+
+def fetch_events(start, end, min_mag=None, limit=None, timeout=None, retries=None, session=None, circle=None):
     """Fetch and normalise events in [start, end). Newest first."""
     params = {
         "format": "geojson",
@@ -179,8 +188,32 @@ def fetch_events(start, end, min_mag=None, limit=None, timeout=None, retries=Non
         params["minmagnitude"] = min_mag
     if limit is not None:
         params["limit"] = int(limit)
+    _circle_params(params, circle)
     payload = _get("query", params, timeout=timeout, retries=retries, session=session)
     return normalize_collection(payload)
+
+
+def fetch_event(event_id, timeout=None, retries=None):
+    """
+    Look up one event by its USGS id. FDSN answers an eventid query with a single
+    GeoJSON Feature (not a collection) and with HTTP 404/204 when it is unknown.
+    Returns the normalised event, or None when USGS has no such event.
+    """
+    try:
+        payload = _get("query", {"format": "geojson", "eventid": event_id}, timeout=timeout, retries=retries)
+    except UpstreamError as exc:
+        if "HTTP 404" in str(exc):
+            return None
+        raise
+    if isinstance(payload, dict) and payload.get("type") == "FeatureCollection":
+        features = payload.get("features") or []
+        payload = features[0] if features else None
+    if payload is None:
+        return None
+    event = normalize_feature(payload)
+    if event is None:
+        raise UpstreamError("USGS returned an event without usable coordinates or time", code="upstream_malformed")
+    return event
 
 
 def count_events(start, end, min_mag=None, timeout=None):
