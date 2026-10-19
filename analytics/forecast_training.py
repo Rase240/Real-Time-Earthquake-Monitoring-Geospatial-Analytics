@@ -106,6 +106,37 @@ def family(name):
     return "glm" if name.startswith("poisson_glm") else "gbm" if name.startswith("gbm") else "baseline"
 
 
+def dispersion_evidence(y, mu, origin, split_col):
+    """
+    Out-of-fold NB log score (lower is better) of a constant alpha vs the mean-dependent curve, on validation
+    predictions only: fit on the origins before `split_col`, score those after, and vice versa.
+    """
+    first = origin < split_col
+    out = {}
+    for kind, fit in (("constant_alpha", FC.fit_dispersion), ("mean_dependent_curve", FC.fit_dispersion_curve)):
+        total = 0.0
+        for fm, em in ((first, ~first), (~first, first)):
+            total += -FC.nb_logpmf(y[em], mu[em], fit(y[fm], mu[fm])).sum()
+        out[kind] = round(float(total / len(y)), 5)
+    out["note"] = "Validation period split in two halves by origin; each half's dispersion is scored on the other half."
+    return out
+
+
+def week_bootstrap_skill(y, mu_sel, mu_other, origin, n_boot=1000, seed=SEED):
+    """
+    95% interval for deviance skill 1 - D(selected) / D(other) by resampling whole forecast weeks (all regions of
+    an origin together, since regions in the same week share global activity).
+    """
+    d_sel, d_oth = FC.poisson_unit_deviance(y, mu_sel), FC.poisson_unit_deviance(y, mu_other)
+    weeks, inv = np.unique(origin, return_inverse=True)
+    s_sel = np.bincount(inv, weights=d_sel, minlength=len(weeks))
+    s_oth = np.bincount(inv, weights=d_oth, minlength=len(weeks))
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(weeks), (n_boot, len(weeks)))
+    skill = 1 - s_sel[idx].sum(axis=1) / s_oth[idx].sum(axis=1)
+    return [round(float(v), 4) for v in np.quantile(skill, [0.025, 0.975])]
+
+
 def train_threshold(C, L, n_weeks, threshold, epoch_ms=None):
     """Full selection + walk-forward evaluation for one threshold. Returns (estimator, meta, backtest)."""
     epoch_ms = ms(EPOCH) if epoch_ms is None else epoch_ms
@@ -122,17 +153,20 @@ def train_threshold(C, L, n_weeks, threshold, epoch_ms=None):
              len(k_train), len(k_val), len(k_test))
 
     Xtr, ytr, _, rtr = make_dataset(C, L, k_train, reg)
-    Xva, yva, _, rva = make_dataset(C, L, k_val, reg)
+    Xva, yva, ova, rva = make_dataset(C, L, k_val, reg)
 
-    # ---- validation: every candidate fit on train, scored on validation
+    # ---- validation: every candidate fit on train, scored on validation. The dispersion (constant alpha and the
+    #      mean-dependent curve) is fitted on these validation predictions; the test period never touches it.
     cands = _candidates()
-    val, alphas = {}, {}
+    val, alphas, curves, val_mu = {}, {}, {}, {}
     for name, factory in cands.items():
         _, mu = _fit_predict(factory, Xtr, ytr, rtr, Xva, rva)
+        val_mu[name] = mu
         alphas[name] = FC.fit_dispersion(yva, mu)
-        val[name] = FC.count_metrics(yva, mu, alphas[name])
-        log.info("  val %-26s dev %.4f  MAE %.4f  alpha %.3f", name, val[name]["poisson_deviance"],
-                 val[name]["mae"], alphas[name])
+        curves[name] = FC.fit_dispersion_curve(yva, mu)
+        val[name] = FC.count_metrics(yva, mu, curves[name])
+        log.info("  val %-26s dev %.4f  MAE %.4f  alpha %.3f  curve a %.3f b %.3f", name, val[name]["poisson_deviance"],
+                 val[name]["mae"], alphas[name], curves[name]["a"], curves[name]["b"])
 
     def best_of(fam):
         names = [n for n in cands if family(n) == fam]
@@ -142,6 +176,9 @@ def train_threshold(C, L, n_weeks, threshold, epoch_ms=None):
     selected = best_gbm if gbm_gain > SELECTION_TOLERANCE else best_glm
     best_baseline = min((n for n in cands if family(n) == "baseline"), key=lambda n: val[n]["poisson_deviance"])
     log.info("  selected %s (GBM validation deviance gain over GLM %.2f%%)", selected, 100 * gbm_gain)
+    disp_evidence = dispersion_evidence(yva, val_mu[selected], ova, k_train_end + (k_val_end - k_train_end) // 2)
+    log.info("  dispersion out-of-fold NB log score: constant %.5f, curve %.5f", disp_evidence["constant_alpha"],
+             disp_evidence["mean_dependent_curve"])
 
     # ---- walk-forward test: yearly expanding-window refits
     evaluated = ["historical_mean", "rolling_mean_4w", "rolling_mean_52w", best_glm, best_gbm]
@@ -168,22 +205,26 @@ def train_threshold(C, L, n_weeks, threshold, epoch_ms=None):
     y_test = np.concatenate(y_test)
     k_rows, r_rows = np.concatenate(k_rows), np.concatenate(r_rows)
     preds = {n: np.concatenate(v) for n, v in preds.items()}
-    test = {n: FC.count_metrics(y_test, preds[n], alphas[n]) for n in evaluated}
+    test = {n: FC.count_metrics(y_test, preds[n], curves[n], central=True) for n in evaluated}
+    test_constant_alpha = FC.count_metrics(y_test, preds[selected], alphas[selected], central=True)
     year_of = np.array([datetime.fromtimestamp((epoch_ms + k * WEEK_MS) / 1000, tz=timezone.utc).year for k in k_rows])
-    by_year = {int(y): {n: FC.count_metrics(y_test[year_of == y], preds[n][year_of == y], alphas[n])
+    by_year = {int(y): {n: FC.count_metrics(y_test[year_of == y], preds[n][year_of == y], curves[n])
                         for n in (selected, "historical_mean", "rolling_mean_4w")} for y in years}
 
     sel_mu = preds[selected]
     region_rows = []
     for r in reg:
         m = r_rows == r
-        sm = FC.count_metrics(y_test[m], sel_mu[m], alphas[selected])
+        sm = FC.count_metrics(y_test[m], sel_mu[m], curves[selected])
         bm = FC.count_metrics(y_test[m], preds["historical_mean"][m])
+        b52 = FC.count_metrics(y_test[m], preds["rolling_mean_52w"][m])
         region_rows.append({"index": int(r), "id": regions.region_id(r), "label": regions.label(r),
                             "bounds": regions.bounds(r), "train_weekly_mean": round(float(train_mean[r]), 4),
                             "test": {k: sm[k] for k in ("n", "mean_observed", "mean_predicted", "mae", "rmse",
-                                                        "poisson_deviance", "coverage_80", "coverage_95")},
-                            "baseline_historical_mean": {k: bm[k] for k in ("mae", "poisson_deviance")}})
+                                                        "poisson_deviance", "coverage_80", "coverage_95",
+                                                        "model_implied_coverage_80", "mean_width_80")},
+                            "baseline_historical_mean": {k: bm[k] for k in ("mae", "poisson_deviance")},
+                            "baseline_rolling_mean_52w": {k: b52[k] for k in ("mae", "poisson_deviance")}})
 
     # Reliability by predicted-mean bin (selected model).
     edges = [0, 0.1, 0.25, 0.5, 1, 2, 4, 8, np.inf]
@@ -191,11 +232,41 @@ def train_threshold(C, L, n_weeks, threshold, epoch_ms=None):
     for a, b in zip(edges[:-1], edges[1:], strict=True):
         m = (sel_mu >= a) & (sel_mu < b)
         if m.sum():
-            lo80, hi80 = FC.interval(sel_mu[m], alphas[selected], 0.8)
+            lo80, hi80 = FC.interval(sel_mu[m], curves[selected], 0.8)
             reliability.append({"predicted_from": a, "predicted_to": None if np.isinf(b) else b, "n": int(m.sum()),
                                 "mean_predicted": round(float(sel_mu[m].mean()), 4),
                                 "mean_observed": round(float(y_test[m].mean()), 4),
-                                "coverage_80": round(float(np.mean((y_test[m] >= lo80) & (y_test[m] <= hi80))), 4)})
+                                "coverage_80": round(float(np.mean((y_test[m] >= lo80) & (y_test[m] <= hi80))), 4),
+                                "model_implied_coverage_80": round(float(np.mean(
+                                    FC.interval_mass(lo80, hi80, sel_mu[m], curves[selected]))), 4),
+                                "mean_width_80": round(float(np.mean(hi80 - lo80)), 3)})
+
+    # Regional and activity-level breakdown: does the aggregate gain hold everywhere?
+    d_sel = FC.poisson_unit_deviance(y_test, sel_mu)
+    regional = {"regions": len(reg)}
+    for base in ("historical_mean", "rolling_mean_52w"):
+        d_b = FC.poisson_unit_deviance(y_test, preds[base])
+        better = [float(d_sel[r_rows == r].sum() < d_b[r_rows == r].sum()) for r in reg]
+        regional[f"regions_better_than_{base}"] = int(sum(better))
+    tiers = np.quantile(train_mean[reg], [1 / 3, 2 / 3])
+    tier_of = np.digitize(train_mean[r_rows], tiers)
+    region_tier = np.digitize(train_mean[reg], tiers)
+    by_activity = []
+    for t_, name in enumerate(("low", "middle", "high")):
+        m = tier_of == t_
+        sm = FC.count_metrics(y_test[m], sel_mu[m], curves[selected])
+        hm = FC.count_metrics(y_test[m], preds["historical_mean"][m])
+        in_tier = train_mean[reg][region_tier == t_]
+        by_activity.append({"tier": name, "regions": int(len(np.unique(r_rows[m]))),
+                            "train_weekly_mean_range": [round(float(in_tier.min()), 3), round(float(in_tier.max()), 3)],
+                            "n": sm["n"], "share_zero_weeks": round(float(np.mean(y_test[m] == 0)), 4),
+                            "poisson_deviance": sm["poisson_deviance"], "historical_mean_deviance": hm["poisson_deviance"],
+                            "deviance_skill_vs_historical_mean": round(1 - sm["poisson_deviance"] / hm["poisson_deviance"], 4),
+                            "coverage_80": sm["coverage_80"], "model_implied_coverage_80": sm["model_implied_coverage_80"],
+                            "mean_width_80": sm["mean_width_80"]})
+    regional["by_activity_tier"] = by_activity
+    regional["note"] = ("Per-region test periods hold ~350 weeks with mostly small counts; per-region skill is noisy and "
+                        "is not a reliable ranking of regions.")
 
     # ---- final served model: selected configuration on every sample
     Xall, yall, _, rall = make_dataset(C, L, k_all, reg)
@@ -221,6 +292,7 @@ def train_threshold(C, L, n_weeks, threshold, epoch_ms=None):
 
     skill = {n: round(1 - test[selected]["poisson_deviance"] / test[n]["poisson_deviance"], 4)
              for n in evaluated if n != selected}
+    skill_ci = {n: week_bootstrap_skill(y_test, sel_mu, preds[n], k_rows) for n in evaluated if n != selected}
     meta = {
         "trained_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "target": (f"Number of USGS catalogue earthquakes with magnitude >= {threshold} and epicentre in a "
@@ -231,7 +303,12 @@ def train_threshold(C, L, n_weeks, threshold, epoch_ms=None):
         "selected_model": selected, "selection_rule": (
             "Lowest validation mean Poisson deviance within each family; gradient boosting is chosen over the GLM "
             f"only if it is more than {SELECTION_TOLERANCE:.0%} better on validation."),
-        "alpha": alphas[selected], "dispersion_method": "NB2 maximum likelihood on validation predictions",
+        "alpha": alphas[selected], "dispersion_curve": curves[selected],
+        "dispersion_method": ("NB2 with alpha(mu) = exp(a + b log mu), maximum likelihood on validation predictions "
+                              "(alpha: the constant-dispersion MLE, for reference)"),
+        "dispersion_evidence": disp_evidence,
+        "interval_method": ("Shortest integer interval with predictive probability >= the level (NB2, dispersion "
+                            "curve fitted on validation data)"),
         "periods": {"epoch": iso_day(epoch_ms), "warmup_weeks": 52,
                     "train": {"from": iso_day(epoch_ms + k_train.min() * WEEK_MS),
                               "to": iso_day(epoch_ms + (k_train.max() + 1) * WEEK_MS), "origins": int(len(k_train))},
@@ -248,8 +325,10 @@ def train_threshold(C, L, n_weeks, threshold, epoch_ms=None):
         "regions": [{"index": int(r), "id": regions.region_id(r), "label": regions.label(r),
                      "bounds": regions.bounds(r), "train_weekly_mean": round(float(train_mean[r]), 4)} for r in reg],
         "validation_metrics": val, "test_metrics": test, "test_by_year": by_year,
-        "test_by_region": region_rows, "test_reliability": reliability,
-        "deviance_skill_vs": skill, "alphas": alphas,
+        "test_by_region": region_rows, "test_reliability": reliability, "test_regional_summary": regional,
+        "test_selected_with_constant_alpha": test_constant_alpha,
+        "deviance_skill_vs": skill, "deviance_skill_ci95_week_bootstrap": skill_ci, "alphas": alphas,
+        "dispersion_curves": curves,
         "best_baseline_on_validation": best_baseline, "glm_coefficients": coefficients,
         "seed": SEED,
         "limitations": [
@@ -257,8 +336,10 @@ def train_threshold(C, L, n_weeks, threshold, epoch_ms=None):
             "the week, or how large any individual earthquake will be.",
             "Most of the forecast skill comes from persistence of ongoing sequences (recent counts); "
             "the model cannot anticipate a sequence that has not started.",
-            "Intervals assume a negative-binomial distribution with one dispersion for all regions; coverage is "
-            "checked on the test period and varies by region.",
+            "Intervals assume a negative-binomial distribution whose dispersion depends only on the predicted mean "
+            "(not on the region); coverage is checked on the test period and varies by region.",
+            "Counts are integers, so an interval cannot hold exactly 80% or 95% probability; compare empirical "
+            "coverage with the model-implied coverage, which is at least the nominal level.",
             "Catalogue completeness at M4.5 varies by region and over time; counts are compared only within "
             "each cell, never across cells.",
             "Live features use the USGS feed at the forecast origin; events posted late lower the most recent count.",

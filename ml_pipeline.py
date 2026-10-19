@@ -9,9 +9,10 @@ Offline training and evaluation for TerraWatcher's analytical modules.
   python ml_pipeline.py all          # forecast + anomaly + sequences + aftershock (+ report)
   python ml_pipeline.py report       # rebuild docs/ml_evaluation.md from models/*.json
 
-Every command except `download` and `sequences` reads data/history_catalog.csv
-(downloaded once). Outputs go to models/ and docs/ml_evaluation.md. Training is
-never done by the web application.
+Every command except `download` reads data/history_catalog.csv (downloaded
+once); `sequences` runs without it but then skips its real-catalogue split
+check. Outputs go to models/ and docs/ml_evaluation.md. Training is never done
+by the web application.
 """
 import argparse
 import json
@@ -57,7 +58,12 @@ def cmd_anomaly(cat, meta):
 
 def cmd_sequences(cat=None, meta=None):
     from analytics import evaluation
-    _write_json("sequence_eval.json", evaluation.evaluate_sequences())
+    if cat is None:
+        try:
+            cat, meta = catalog.load_history()
+        except FileNotFoundError:
+            log.warning("No downloaded catalogue: the real-catalogue split check is skipped.")
+    _write_json("sequence_eval.json", evaluation.evaluate_sequences(cat=cat, meta=meta))
 
 
 def cmd_aftershock(cat, meta):

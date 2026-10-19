@@ -204,7 +204,7 @@ def fit_omori(t_days, t_start, t_end, mu=0.0):
     if not c_fixed and (c <= C_BOUNDS[0] * 1.05 or c >= C_BOUNDS[1] * 0.95):
         reasons.append(f"Offset c = {c:.4g} d is at its search bound {C_BOUNDS}.")
 
-    se = None
+    se = cov = None
     if c_fixed:
         theta, f = np.array([logK, p]), (lambda th: _nll([th[0], logc, th[1]], t, mu, t_start, t_end))
     else:
@@ -212,9 +212,12 @@ def fit_omori(t_days, t_start, t_end, mu=0.0):
     H = _hessian(f, theta)
     try:
         if np.all(np.isfinite(H)) and np.all(np.linalg.eigvalsh(H) > 0):
-            sd = np.sqrt(np.diag(np.linalg.inv(H)))
+            V = np.linalg.inv(H)
+            sd = np.sqrt(np.diag(V))
             se = {"log_K": round(float(sd[0]), 4), "p": round(float(sd[-1]), 4),
                   "log_c": None if c_fixed else round(float(sd[1]), 4)}
+            cov = {"parameters": ["log_K", "p"] if c_fixed else ["log_K", "log_c", "p"],
+                   "matrix": [[float(f"{v:.6g}") for v in row] for row in V]}
         else:
             reasons.append("Likelihood surface is flat or not curved at the optimum (Hessian not positive definite).")
     except np.linalg.LinAlgError:
@@ -243,7 +246,10 @@ def fit_omori(t_days, t_start, t_end, mu=0.0):
     return {**base, "status": "fitted" if reliable else "unreliable", "reliable": reliable, "reasons": reasons,
             "notes": notes, "c_fixed": c_fixed,
             "parameters": {"K": round(K, 5), "c_days": round(c, 6), "p": round(p, 4)},
-            "standard_errors": se, "confidence_95": ci,
+            "standard_errors": se, "confidence_95": ci, "covariance": cov,
+            "confidence_note": ("confidence_95 gives Wald 95% confidence intervals for the PARAMETERS K, c and p "
+                                "(uncertainty of the fitted curve). They are not prediction intervals for future "
+                                "event counts, which must also include Poisson variation and are wider."),
             "diagnostics": {"converged": bool(best.success), "log_likelihood": round(ll, 3),
                             "aic": round(aic, 3), "aic_constant_rate": round(aic_const, 3),
                             "delta_aic_vs_constant": round(aic_const - aic, 3),
@@ -256,6 +262,58 @@ def expected_count(fit, a, b):
     """Expected number of events in [a, b] (days) under a fitted model."""
     pr = fit["parameters"]
     return fit["background_rate_per_day"] * (b - a) + _integral(pr["K"], pr["c_days"], pr["p"], a, b)
+
+
+def rate_draws(fit, a, b, n_draws=4000, seed=0):
+    """
+    Expected counts in [a, b] days for parameter draws (log K, [log c], p) ~ N(MLE, inverse Hessian),
+    background rate fixed. None when the fit has no covariance (no reliable parameter uncertainty).
+    """
+    pr, mu, cov = fit.get("parameters"), fit["background_rate_per_day"], fit.get("covariance")
+    if not pr or not cov:
+        return None
+    names = cov["parameters"]
+    centre = {"log_K": math.log(pr["K"]), "log_c": math.log(pr["c_days"]), "p": pr["p"]}
+    draws = np.random.default_rng(seed).multivariate_normal([centre[n] for n in names], np.asarray(cov["matrix"]), n_draws)
+    col = {n: draws[:, i] for i, n in enumerate(names)}
+    lc = col.get("log_c", np.full(n_draws, centre["log_c"]))
+    with np.errstate(all="ignore"):
+        lam = np.array([mu * (b - a) + _integral(math.exp(k), math.exp(c), p, a, b)
+                        for k, c, p in zip(col["log_K"], lc, col["p"], strict=True)])
+    lam = lam[np.isfinite(lam) & (lam >= 0)]
+    return lam if len(lam) >= n_draws // 2 else None
+
+
+def predictive_count(fit, a, b, levels=(0.8, 0.95), n_draws=4000, seed=0, include_parameter_uncertainty=True,
+                     dispersion=0.0):
+    """
+    Predictive distribution of the NUMBER of events in [a, b] days (an aggregate count, not individual
+    aftershocks) under a fitted model, by simulation: expected counts from `rate_draws` (or the point
+    estimate when include_parameter_uncertainty is False), then a count per draw that is Poisson
+    (dispersion = 0) or negative binomial with Var = lam + dispersion * lam^2 (gamma-Poisson). The NB
+    stage represents clustering and misspecification that the Poisson process ignores; its dispersion
+    must be calibrated on OTHER sequences (see analytics.evaluation). Returns None without covariance.
+    """
+    if not fit.get("parameters"):
+        return None
+    rng = np.random.default_rng(seed + 1)
+    if include_parameter_uncertainty:
+        lam = rate_draws(fit, a, b, n_draws, seed)
+        if lam is None:
+            return None
+    else:
+        lam = np.full(n_draws, expected_count(fit, a, b))
+    if dispersion > 0:
+        lam = lam * rng.gamma(1.0 / dispersion, dispersion, len(lam))
+    counts = rng.poisson(lam)
+    out = {"window_days": [a, b], "expected": round(float(expected_count(fit, a, b)), 3),
+           "median": float(np.median(counts)), "parameter_uncertainty": include_parameter_uncertainty,
+           "count_dispersion": dispersion}
+    for level in levels:
+        q = (1 - level) / 2
+        out[f"interval_{int(round(level * 100))}"] = [int(np.quantile(counts, q, method="lower")),
+                                                     int(np.quantile(counts, 1 - q, method="higher"))]
+    return out
 
 
 def curve(fit, edges):

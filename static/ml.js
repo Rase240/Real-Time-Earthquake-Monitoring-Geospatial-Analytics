@@ -731,11 +731,12 @@
       <div class="grid-2">
         ${card('Validation — used for model selection', `${p.validation.from} → ${p.validation.to}`, table(['Model', 'MAE', 'RMSE', 'Poisson dev.', 'NB log score'], valRows) + `<p class="small muted">Models fit on ${esc(p.train.from)} → ${esc(p.train.to)} (${m.samples.train} samples).</p>`)}
         ${card('Final test — held out', `${p.test.from} → ${p.test.to}`, metricsTable(m.test_metrics, Object.keys(m.test_metrics)) +
-          `<p class="small muted">${esc(p.test.method)}; ${m.samples.test} region-weeks. Deviance skill of ${esc(sel)}: ${Object.entries(m.deviance_skill_vs).map(([k, v]) => `${esc(k)} ${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`).join(', ')}.</p>`)}
+          `<p class="small muted">${esc(p.test.method)}; ${m.samples.test} region-weeks. Deviance skill of ${esc(sel)} (95% interval from resampling whole weeks): ${Object.entries(m.deviance_skill_vs).map(([k, v]) => { const ci = m.deviance_skill_ci95_week_bootstrap?.[k]; return `${esc(k)} ${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%${ci ? ` [${(ci[0] * 100).toFixed(1)}, ${(ci[1] * 100).toFixed(1)}]` : ''}`; }).join(', ')}.</p>`)}
         ${card('Test deviance by year', 'Lower is better', CH.lineChart({ title: 'Mean Poisson deviance by test year', x: { label: 'Year' }, y: { label: 'Mean Poisson deviance' }, series: yearSeries }))}
-        ${card('Predictive reliability (test)', `α = ${C.fmt(m.alpha, 3)}`, table(['Predicted', 'n', 'Mean pred.', 'Mean obs.', '80% cov.'],
-          m.test_reliability.map((r) => [`${r.predicted_from}–${r.predicted_to ?? '∞'}`, r.n, f(r.mean_predicted), f(r.mean_observed), f(r.coverage_80)])) +
-          '<p class="small muted">Coverage above 0.80 means the intervals are wider than necessary (conservative), largely because counts are discrete and often 0 or 1.</p>')}
+        ${card('Predictive reliability (test)', m.dispersion_curve ? `α(μ) = exp(${C.fmt(m.dispersion_curve.a, 2)} ${m.dispersion_curve.b < 0 ? '−' : '+'} ${C.fmt(Math.abs(m.dispersion_curve.b), 2)} log μ)` : `α = ${C.fmt(m.alpha, 3)}`,
+          table(['Predicted', 'n', 'Mean pred.', 'Mean obs.', '80% cov.', 'Model-implied', 'Width'],
+          m.test_reliability.map((r) => [`${r.predicted_from}–${r.predicted_to ?? '∞'}`, r.n, f(r.mean_predicted), f(r.mean_observed), f(r.coverage_80), f(r.model_implied_coverage_80), f(r.mean_width_80, 2)])) +
+          `<p class="small muted">${esc(m.interval_method || '')}. Counts are integers, so no interval holds exactly 80%: “model-implied” is the probability the forecast itself gives its interval (at least 0.80). Calibration means observed coverage is close to model-implied, not to 0.80.</p>`)}
         ${card('Busiest cells on the test period', `${worse} of ${m.test_by_region.length} cells worse than historical mean`, table(['Cell', 'Mean obs.', 'MAE', 'Dev. model', 'Dev. hist. mean'],
           busiest.map((r) => [esc(r.label), f(r.mean_observed, 2), f(r.mae), f(r.poisson_deviance), f(r.baseline_deviance)])))}
         ${card('Limitations', '', `<ul class="small muted tight">${m.limitations.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`)}
@@ -757,7 +758,11 @@
         ${card('Synthetic scenarios', `ε ${sq.parameters.eps_km} km, ${sq.parameters.eps_hours} h, min ${sq.parameters.min_samples}`, table(['Scenario', 'ARI', 'ARI min', 'ARI naive°', 'ARI space-only', 'true / found'], rows) +
           `<p class="small muted">${esc(sq.data)}. Seeds ${esc(sq.seeds.join(', '))}. “Naive°” is Euclidean distance on raw degrees; “space-only” ignores time.</p>`)}
         ${card('Overlap and sensitivity', 'ARI', table(['Overlapping sequences: ε km', 'ARI'], sq.overlapping_sequences_vs_eps_km.map((r) => [r.eps_km, f(r.ari_mean)])) +
-          `<p class="small">${esc(sq.metrics_note)}</p>${live}`)}</div>`);
+          `<p class="small">${esc(sq.metrics_note)}</p>${live}`)}
+        ${sq.method_comparison ? card('Alternative methods', 'mean ARI over scenarios', table(['Method', 'Mean ARI', 'Largest drop vs default'],
+          Object.entries(sq.method_comparison.mean_ari_over_scenarios).map(([k, v]) => [esc(k), f(v), f(sq.method_comparison.largest_ari_drop_vs_default[k])])) +
+          `<p class="small">Decision: ${esc(sq.method_comparison.decision)}.</p><p class="small muted">${esc(sq.method_comparison.selection_rule)}${sq.method_comparison.real_catalogue_split_check ? ' ' + esc(sq.method_comparison.real_catalogue_split_check.note) : ''}</p>` +
+          (sq.substructure_check_candidate ? `<p class="small">Rejected candidate, a “possibly merged” check: it flagged ${sq.substructure_check_candidate.total.flagged_merged} of ${sq.substructure_check_candidate.total.merged_sequences} synthetic merges and ${sq.substructure_check_candidate.total.flagged_single} of ${sq.substructure_check_candidate.total.single_sequences} synthetic single sequences${sq.substructure_check_candidate.real_m7_mainshock_sequences ? `, but also ${sq.substructure_check_candidate.real_m7_mainshock_sequences.flagged} of ${sq.substructure_check_candidate.real_m7_mainshock_sequences.checked} real M7+ aftershock sequences` : ''}, so it is not shown.</p>` : '')) : ''}</div>`);
     }
 
     const an = d.anomaly;
@@ -766,11 +771,14 @@
       const c = an.configuration, ns = an.null_simulation, md = an.missing_data;
       parts.push(`<h2 class="perf-h">Anomaly detection · negative binomial + Benjamini–Hochberg</h2><div class="grid-2">
         ${card('False alerts (null simulation)', `${ns.simulated_runs} runs`, dl([['False-alert rate per cell test', f(ns.false_alert_rate_per_region_test, 4)],
-          ['Runs with ≥ 1 false alert', f(ns.share_of_runs_with_any_false_alert, 3)], ['Unadjusted p ≤ 0.05 rate', f(ns['unadjusted_p_below_0.05_rate'], 4)],
+          ['Runs with ≥ 1 false alert', `${f(ns.share_of_runs_with_any_false_alert, 3)}${ns.share_of_runs_with_any_false_alert_wilson95 ? ` (95% CI ${f(ns.share_of_runs_with_any_false_alert_wilson95[0], 3)}–${f(ns.share_of_runs_with_any_false_alert_wilson95[1], 3)})` : ''}`], ['Unadjusted p ≤ 0.05 rate', f(ns['unadjusted_p_below_0.05_rate'], 4)],
           ['Rolling-rule baseline false-alert rate', f(ns.baseline_rolling_rule_false_alert_rate, 4)]]) + `<p class="small muted">${esc(ns.construction)}</p>`)}
         ${card('Synthetic injected excess', `${c.window_weeks}-week window`, table(['Injected', 'Detected (BH)', 'p ≤ 0.05', 'Rolling rule'],
           Object.entries(an.synthetic_injection).map(([k, v]) => [esc(k), f(v.detection_rate), f(v['unadjusted_p_below_0.05_rate']), f(v.baseline_rolling_rule_detection_rate)])) +
           `<p class="small muted">${esc(an.injection_construction)} Synthetic results do not prove effectiveness on real geological phenomena.</p>`)}
+        ${an.false_alert_diagnosis ? card('Why false alerts remain', `${an.false_alert_diagnosis.runs_per_null} runs per null`, table(['Null', ...Object.keys(Object.values(an.false_alert_diagnosis.nulls)[0]).map(esc)],
+          Object.entries(an.false_alert_diagnosis.nulls).map(([k, v]) => [esc(k.replaceAll('_', ' ')), ...Object.values(v).map((x) => f(x.runs_with_false_alert, 3))])) +
+          `<p class="small muted">Share of runs with at least one false alert. ${esc(an.false_alert_diagnosis.interpretation)}</p>`) : ''}
         ${card('Held-out real data', `${an.held_out_period.from} → ${an.held_out_period.to}`, table(['Threshold / window', 'Runs', 'Flags', 'Rate', 'Runs flagged', 'Rolling rule'],
           Object.entries(an.held_out_real_behaviour).map(([k, v]) => [esc(k), v.runs, v.flags, f(v.flag_rate_per_region_test, 4), f(v.share_of_runs_with_any_flag, 3), v.baseline_rolling_rule_flags])) +
           `<p class="small muted">${esc(an.held_out_note)}</p>`)}
@@ -791,7 +799,11 @@
           ['p of reliable fits (median, IQR)', pr ? `${f(pr.median, 2)} (${f(pr.q25, 2)}–${f(pr.q75, 2)})` : '—']]) + `<p class="small muted">${esc(af.selection)}</p>`)}
         ${card('Out of sample: count in days 30–90', `${o.sequences_with_reliable_30_day_fit} sequences`, table(['Predictor', 'Median |log ratio|'],
           [['Omori–Utsu + background', f(o.median_abs_log_ratio_omori)], ['Last-week rate held constant', f(o.median_abs_log_ratio_last_week_rate)], ['Background only', f(o.median_abs_log_ratio_background_only)]]) +
-          `<p class="small">Poisson 95% coverage of the Omori prediction: ${f(o.poisson_95_coverage_omori, 2)} — the intervals are too narrow because parameter uncertainty and secondary sequences are ignored.</p><p class="small muted">${esc(o.metric_note)}</p>${current}`)}</div>`);
+          `<p class="small">Poisson 95% coverage of the Omori prediction: ${f(o.poisson_95_coverage_omori, 2)} — too narrow, because parameter uncertainty and clustering beyond Poisson are ignored.</p><p class="small muted">${esc(o.metric_note)}</p>${current}`)}
+        ${o.predictive_intervals ? card('Predictive intervals, days 30–90 (mainshocks 2013+, out of sample)', `${o.predictive_intervals.mainshocks_2013_and_later.sequences} sequences`,
+          table(['Method', '80% coverage', '95% coverage', 'Median 95% width'], Object.keys(o.predictive_intervals.methods).map((k) => { const v = o.predictive_intervals.mainshocks_2013_and_later[k];
+            return [esc(k.replaceAll('_', ' ')), f(v['80'].coverage, 2), f(v['95'].coverage, 2), f(v['95'].median_width_events, 0)]; })) +
+          `<p class="small muted">${esc(o.predictive_intervals.note)} Count dispersion d = ${f(o.predictive_intervals.count_dispersion_d, 3)}. Evaluated offline only: the Aftershock view shows fits of past data, not forecasts.</p>`) : ''}</div>`);
     }
 
     const lg = d.legacy_severity_model;

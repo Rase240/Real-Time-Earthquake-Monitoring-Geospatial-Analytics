@@ -176,6 +176,92 @@ def test_long_term_dispersion_makes_the_test_more_cautious():
     assert heavy["p_value"] > light["p_value"] and heavy["long_term_dispersion"] == 5.0
 
 
+def test_detect_row_fields_are_mutually_consistent():
+    """expected, dispersion, p and q in each row are exactly what the documented formulas give for that row."""
+    rng = np.random.default_rng(8)
+    C = np.zeros((regions.N_REGIONS, 56), dtype=np.int64)
+    idx = np.arange(60)
+    C[idx] = rng.negative_binomial(1.0, 0.4, (60, 56))
+    C[idx[:3], 52:] += 15
+    la = rng.uniform(0, 2, regions.N_REGIONS)
+    res, n_tested = AN.detect(C, 4, 52, 0.05, long_alpha=la)
+    tested = [r for r in res if r["p_value"] is not None]
+    assert len(tested) == n_tested
+    for r in tested:
+        ref = C[r["index"], :52]
+        alpha = max(AN.moment_dispersion(ref), la[r["index"]])
+        assert r["weekly_dispersion"] == pytest.approx(alpha, abs=1e-4)
+        assert r["long_term_dispersion"] == pytest.approx(la[r["index"]], abs=1e-4)
+        assert r["expected"] == pytest.approx(4 * ref.mean(), abs=1e-3)
+        assert r["reference_total"] == ref.sum() and r["observed"] == C[r["index"], 52:].sum()
+        assert r["p_value"] == pytest.approx(float(AN.conditional_p_value(r["observed"], ref.sum(), 4, 52, alpha)), rel=1e-3)
+    p = np.array([float(AN.conditional_p_value(r["observed"], r["reference_total"], 4, 52,
+                                               max(AN.moment_dispersion(C[r["index"], :52]), la[r["index"]])))
+                  for r in tested])
+    q = AN.benjamini_hochberg(p)
+    for r, qq in zip(tested, q, strict=True):
+        assert r["q_value"] == pytest.approx(qq, rel=1e-3)
+        assert (r["status"] == "elevated") == (qq <= 0.05 and r["observed"] >= AN.MIN_OBSERVED)
+
+
+def test_smallest_attainable_p_grows_with_dispersion():
+    """P(Y = N | N) increases with alpha, so a cell that cannot reach significance at the floor cannot at all."""
+    for N in (2, 5, 20, 60):
+        pm = AN.conditional_p_value(np.full(5, N), np.zeros(5), 4, 52, [0.0, 0.3, 1.0, 5.0, 50.0])
+        assert np.all(pm > 0) and np.all(np.diff(pm) > 0) and pm[-1] <= 4 / 56 + 1e-9
+
+
+def test_extreme_upper_tail_p_value_is_accurate_not_zero():
+    """1 - cdf cancels to 0 in the far tail; the p-value must still equal the pmf summed over the tail."""
+    k, n, alpha, y, x = 4, 52, 0.3, 40, 10
+    p = float(AN.conditional_p_value(y, x, k, n, alpha))
+    exact = stats.betabinom.pmf(np.arange(y, x + y + 1), x + y, k / alpha, n / alpha).sum()
+    assert 0 < p == pytest.approx(exact, rel=1e-9)
+
+
+def test_wilson_interval_known_values():
+    from analytics.evaluation import wilson_interval
+    for k, n in ((56, 1000), (3, 40), (980, 1000)):
+        ref = stats.binomtest(k, n).proportion_ci(method="wilson")
+        assert wilson_interval(k, n) == [pytest.approx(ref.low, abs=1e-4), pytest.approx(ref.high, abs=1e-4)]
+    assert wilson_interval(0, 50)[0] == 0.0 and wilson_interval(0, 0) == [None, None]
+
+
+def test_null_simulation_is_reproducible():
+    from analytics import evaluation as EV
+    mu, var = np.full(regions.N_REGIONS, 1.5), np.full(regions.N_REGIONS, 4.0)
+    a = EV._simulate(np.random.default_rng(7), mu, var, np.arange(20), 56)
+    b = EV._simulate(np.random.default_rng(7), mu, var, np.arange(20), 56)
+    assert np.array_equal(a, b) and a[20:].sum() == 0
+
+
+def test_injection_strata_add_up_to_the_totals():
+    from analytics import evaluation as EV
+    rng = np.random.default_rng(9)
+    C = np.zeros((regions.N_REGIONS, 64), dtype=np.int64)
+    C[:80] = rng.poisson(rng.uniform(0.1, 4.0, (80, 1)), (80, 64))
+    floors = {"mle": np.zeros(regions.N_REGIONS)}
+    tallies, strata = EV._injection(C, [60, 64], 4, 52, 0.05, floors, {"x": ("mle", True, True)})
+    for f in EV.INJECTION_FACTORS:
+        assert strata["x"][f][:, 1].sum() == tallies["x"][f][3] and strata["x"][f][:, 0].sum() == tallies["x"][f][0]
+    det = [tallies["x"][f][0] / tallies["x"][f][3] for f in EV.INJECTION_FACTORS]
+    assert det == sorted(det)                                   # larger injected excess, more detections
+
+
+def test_committed_anomaly_artifacts_describe_the_active_method():
+    import config
+    from analytics import evaluation as EV
+    with open(f"{config.MODEL_DIR}/anomaly_eval.json", encoding="utf-8") as fh:
+        ev = json.load(fh)
+    table, period, err = AN.load_reference(f"{config.MODEL_DIR}/anomaly_reference.json")
+    assert err is None and set(table) == {4.5, 5.0} and period["to"] == "2016-01-04"
+    assert "beta-binomial" in ev["configuration"]["test"] and "maximum likelihood" in ev["configuration"]["long_term_dispersion"]
+    assert ev["method_comparison"]["adopted"] == EV.ADOPTED
+    assert ev["configuration"]["window_weeks"] == AN.DEFAULTS["window_weeks"]
+    lo, hi = ev["null_simulation"]["share_of_runs_with_any_false_alert_wilson95"]
+    assert lo <= ev["null_simulation"]["share_of_runs_with_any_false_alert"] <= hi
+
+
 def test_evaluation_variant_matches_detect():
     """The comparison helper in the offline evaluation reproduces AN.detect for the adopted variant."""
     from analytics import evaluation as EV

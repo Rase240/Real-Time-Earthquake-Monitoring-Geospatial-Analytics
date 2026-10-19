@@ -24,6 +24,18 @@ log = logging.getLogger("terrawatcher.evaluation")
 HOUR_MS = 3_600_000
 DAY_MS = 86_400_000
 T0 = 1_700_000_000_000
+PRED_DRAWS = 4000
+
+
+def wilson_interval(successes, trials, z=1.96):
+    """Wilson score 95% interval for a binomial proportion; [None, None] without trials."""
+    if trials <= 0:
+        return [None, None]
+    p = successes / trials
+    d = 1 + z * z / trials
+    c = (p + z * z / (2 * trials)) / d
+    h = z * math.sqrt(p * (1 - p) / trials + z * z / (4 * trials * trials)) / d
+    return [round(c - h, 4), round(c + h, 4)]
 
 
 # =============================================================================
@@ -77,6 +89,16 @@ def scenario(name, seed):
     elif name == "duplicates_and_invalid":
         parts.append((*_cluster(rng, 52, 160, 100, 30), 0))
         parts.append((*_noise(rng, 20), -1))
+    elif name.startswith("overlap_"):                         # overlap_<km>km_<hours>h
+        km, hours = (float(v[:-2] if v.endswith("km") else v[:-1]) for v in name.split("_")[1:3])
+        parts.append((*_cluster(rng, 10, 125, 100, 25), 0))
+        la, lo = destination(10, 125, 90, km)
+        parts.append((*_cluster(rng, float(la), float(lo), 100 + hours, 25), 1))
+    elif name == "density_contrast":
+        parts.append((*_cluster(rng, -20, -70, 100, 80, sigma_km=20), 0))
+        la, lo = destination(-20, -70, 0, 150)
+        parts.append((*_cluster(rng, float(la), float(lo), 140, 8, sigma_km=10, sigma_h=12), 1))
+        parts.append((*_noise(rng, 60), -1))
     else:
         raise ValueError(name)
     lat = np.concatenate([p[0] for p in parts])
@@ -94,6 +116,15 @@ def scenario(name, seed):
 
 SCENARIOS = ["dense_clusters_with_noise", "simultaneous_separated", "same_place_separated_in_time",
              "overlapping_sequences", "antimeridian", "high_latitude", "duplicates_and_invalid"]
+EXTRA_SCENARIOS = ["overlap_30km_30h", "overlap_100km_30h", "overlap_150km_30h", "overlap_60km_120h", "density_contrast"]
+# Clustering methods compared on identical synthetic data: (algorithm, eps_km or scale km, eps_hours or scale h,
+# min_samples or min_cluster_size). HDBSCAN runs on the same scaled coordinates as DBSCAN.
+CLUSTER_METHODS = {"dbscan_50km_72h (default)": ("dbscan", 50, 72, 4), "dbscan_25km_72h": ("dbscan", 25, 72, 4),
+                   "dbscan_15km_72h": ("dbscan", 15, 72, 4), "dbscan_50km_24h": ("dbscan", 50, 24, 4),
+                   "dbscan_25km_36h": ("dbscan", 25, 36, 4), "hdbscan_mcs5": ("hdbscan", 50, 72, 5),
+                   "hdbscan_mcs8": ("hdbscan", 50, 72, 8)}
+CLUSTER_SELECTION_RULE = ("Replace the default only if a method has a higher mean ARI over all scenarios AND no "
+                          "scenario's mean ARI falls by more than 0.02 (fixed before the comparison was run).")
 
 
 def _naive_degrees(df, eps_km, eps_hours, min_samples):
@@ -124,7 +155,175 @@ def _score(truth, pred):
     return out
 
 
-def evaluate_sequences(seeds=(0, 1, 2, 3, 4)):
+def merges_splits(truth, pred):
+    """
+    False merges: true sequences whose majority predicted sequence is also another true sequence's majority.
+    False splits: true sequences with >= 20% of members in each of two or more predicted sequences.
+    Unassigned share: members of true sequences labelled noise.
+    """
+    truth, pred = np.asarray(truth), np.asarray(pred)
+    major, splits, unassigned = [], 0, 0
+    for s in sorted(set(truth.tolist()) - {-1}):
+        p = pred[truth == s]
+        unassigned += int((p < 0).sum())
+        lab = p[p >= 0]
+        if len(lab):
+            vals, cnt = np.unique(lab, return_counts=True)
+            major.append(int(vals[np.argmax(cnt)]))
+            splits += int(np.sum(cnt >= 0.2 * len(p)) > 1)
+    return len(major) - len(set(major)), splits, unassigned / max(int((truth >= 0).sum()), 1)
+
+
+def _cluster_predict(method, df):
+    algo, a, b, c = CLUSTER_METHODS[method]
+    if algo == "dbscan":
+        return sequences.cluster_labels(df["latitude"].to_numpy(), df["longitude"].to_numpy(), df["time"].to_numpy(),
+                                        a, b, c)[0]
+    from sklearn.cluster import HDBSCAN
+    X = sequences.scaled_coordinates(df["latitude"], df["longitude"], df["time"], a, b)
+    return HDBSCAN(min_cluster_size=c, min_samples=4).fit(X).labels_
+
+
+def compare_cluster_methods(seeds):
+    from analytics.catalog import events_to_frame
+    out = {}
+    for name in SCENARIOS + EXTRA_SCENARIOS:
+        frames = []
+        for seed in seeds:
+            events, truth_map = scenario(name, seed)
+            df, _ = events_to_frame(events)
+            frames.append((df, [truth_map[i] for i in df["id"]]))
+        out[name] = {}
+        for method in CLUSTER_METHODS:
+            ari, mg, sp, un = [], [], [], []
+            for df, truth in frames:
+                pred = _cluster_predict(method, df)
+                ari.append(adjusted_rand_score(truth, pred))
+                m, s, u = merges_splits(truth, pred)
+                mg.append(m)
+                sp.append(s)
+                un.append(u)
+            out[name][method] = {"ari_mean": round(float(np.mean(ari)), 4), "ari_min": round(float(np.min(ari)), 4),
+                                 "false_merges_mean": round(float(np.mean(mg)), 3),
+                                 "false_splits_mean": round(float(np.mean(sp)), 3),
+                                 "unassigned_member_share": round(float(np.mean(un)), 4)}
+    default = next(iter(CLUSTER_METHODS))
+    overall = {m: round(float(np.mean([out[s][m]["ari_mean"] for s in out])), 4) for m in CLUSTER_METHODS}
+    worst_drop = {m: round(float(max(out[s][default]["ari_mean"] - out[s][m]["ari_mean"] for s in out)), 4)
+                  for m in CLUSTER_METHODS}
+    passing = sorted((m for m in CLUSTER_METHODS
+                      if m != default and overall[m] > overall[default] and worst_drop[m] <= 0.02),
+                     key=lambda m: -overall[m])
+    return {"scenarios": out, "mean_ari_over_scenarios": overall, "largest_ari_drop_vs_default": worst_drop,
+            "selection_rule": CLUSTER_SELECTION_RULE, "methods_passing_rule": passing,
+            "decision": f"replace default with {passing[0]}" if passing else "keep the default DBSCAN parameters"}
+
+
+SUBSTRUCTURE_MIN_EVENTS = 20
+
+
+def substructure_groups(X):
+    """
+    Candidate merged-sequence check (evaluated, NOT adopted): HDBSCAN inside one DBSCAN sequence (rows of X: its
+    scaled coordinates); sizes of subgroups holding >= 20% of the members. Two or more would suggest a merge.
+    """
+    from sklearn.cluster import HDBSCAN
+    n = len(X)
+    if n < SUBSTRUCTURE_MIN_EVENTS:
+        return []
+    sub = HDBSCAN(min_cluster_size=max(5, n // 10), min_samples=4).fit(X).labels_
+    return sorted((int((sub == s).sum()) for s in set(sub.tolist()) - {-1} if (sub == s).sum() >= 0.2 * n), reverse=True)
+
+
+def substructure_flag_rates(seeds, cat=None, meta=None):
+    """
+    How often the candidate check fires on DBSCAN sequences that truly merge 2+ synthetic sequences, on genuine single
+    synthetic sequences, and on real M7+ mainshock sequences (mostly single aftershock sequences, so mostly false flags).
+    """
+    from analytics.catalog import events_to_frame
+    p = sequences.DEFAULTS
+    rows = {}
+    for name in SCENARIOS + EXTRA_SCENARIOS:
+        hit = merged = false = single = 0
+        for seed in seeds:
+            events, truth_map = scenario(name, seed)
+            df, _ = events_to_frame(events)
+            lab, _ = sequences.cluster_labels(df["latitude"].to_numpy(), df["longitude"].to_numpy(),
+                                              df["time"].to_numpy(), p["eps_km"], p["eps_hours"], p["min_samples"])
+            X = sequences.scaled_coordinates(df["latitude"], df["longitude"], df["time"], p["eps_km"], p["eps_hours"])
+            truth = np.array([truth_map[i] for i in df["id"]])
+            for c in set(lab.tolist()) - {-1}:
+                m = lab == c
+                if m.sum() < SUBSTRUCTURE_MIN_EVENTS:
+                    continue
+                flag = len(substructure_groups(X[m])) >= 2
+                if len(set(truth[m].tolist()) - {-1}) >= 2:
+                    merged += 1
+                    hit += flag
+                else:
+                    single += 1
+                    false += flag
+        rows[name] = {"merged_sequences": merged, "flagged_merged": hit, "single_sequences": single, "flagged_single": false}
+    tot = {k: sum(r[k] for r in rows.values()) for k in ("merged_sequences", "flagged_merged", "single_sequences",
+                                                         "flagged_single")}
+    out = {"by_scenario": rows, "seeds": list(seeds), "total": {**tot,
+           "hit_rate": round(tot["flagged_merged"] / max(tot["merged_sequences"], 1), 4),
+           "hit_rate_wilson95": wilson_interval(tot["flagged_merged"], tot["merged_sequences"]),
+           "false_flag_rate": round(tot["flagged_single"] / max(tot["single_sequences"], 1), 4),
+           "false_flag_rate_wilson95": wilson_interval(tot["flagged_single"], tot["single_sequences"])}}
+    if cat is not None:
+        t = cat["time"].to_numpy(np.int64)
+        la, lo, mg = cat["latitude"].to_numpy(), cat["longitude"].to_numpy(), cat["mag"].to_numpy(float)
+        checked = flagged = 0
+        for i in np.flatnonzero((mg >= 7.0) & (t <= meta["end_ms"] - 30 * DAY_MS)):
+            w = np.flatnonzero((t >= t[i] - 3 * DAY_MS) & (t <= t[i] + 30 * DAY_MS))
+            w = w[geo.haversine_km(la[i], lo[i], la[w], lo[w]) <= AS.default_radius_km(mg[i])]
+            lab, _ = sequences.cluster_labels(la[w], lo[w], t[w], p["eps_km"], p["eps_hours"], p["min_samples"])
+            own = lab[w == i][0]
+            mem = w[lab == own] if own >= 0 else w[:0]
+            if len(mem) < SUBSTRUCTURE_MIN_EVENTS:
+                continue
+            checked += 1
+            flagged += len(substructure_groups(sequences.scaled_coordinates(la[mem], lo[mem], t[mem], p["eps_km"],
+                                                                            p["eps_hours"]))) >= 2
+        out["real_m7_mainshock_sequences"] = {"checked": checked, "flagged": flagged,
+                                              "flag_rate": round(flagged / max(checked, 1), 4),
+                                              "flag_rate_wilson95": wilson_interval(flagged, checked)}
+    out["decision"] = ("Not adopted. It was dropped after a live check flagged a single M7.7 aftershock sequence; the "
+                       "real-catalogue rate above measures how often it fires on mainshock sequences, which are mostly "
+                       "single aftershock sequences with internal structure along the rupture, not merges.")
+    return out
+
+
+def real_fragmentation(cat, meta, methods, min_main=7.5, days=30):
+    """
+    Real-catalogue split check (no ground truth): for each M>=min_main mainshock, cluster the M4.5+ events within its
+    rupture-length radius during the following `days` days and measure the share that falls in the mainshock's own
+    sequence. Most of these events are aftershocks, so a low share indicates a false split of one sequence.
+    """
+    t = cat["time"].to_numpy(np.int64)
+    la, lo, mg = cat["latitude"].to_numpy(), cat["longitude"].to_numpy(), cat["mag"].to_numpy(float)
+    mains = np.flatnonzero((mg >= min_main) & (t <= meta["end_ms"] - days * DAY_MS))
+    out = {}
+    for method in methods:
+        _, e_km, e_h, ms_ = CLUSTER_METHODS[method]
+        shares = []
+        for i in mains:
+            w = np.flatnonzero((t >= t[i]) & (t <= t[i] + days * DAY_MS))
+            w = w[geo.haversine_km(la[i], lo[i], la[w], lo[w]) <= AS.default_radius_km(mg[i])]
+            if len(w) < 20:
+                continue
+            lab, _ = sequences.cluster_labels(la[w], lo[w], t[w], e_km, e_h, ms_)
+            own = lab[w == i][0]
+            shares.append(float(np.mean(lab == own)) if own >= 0 else 0.0)
+        s = np.array(shares)
+        out[method] = {"mainshocks": len(s), "median_share_in_mainshock_sequence": round(float(np.median(s)), 4),
+                       "share_of_mainshocks_below_half": round(float(np.mean(s < 0.5)), 4),
+                       "share_of_mainshocks_below_half_wilson95": wilson_interval(int(np.sum(s < 0.5)), len(s))}
+    return out
+
+
+def evaluate_sequences(seeds=(0, 1, 2, 3, 4), cat=None, meta=None):
     from analytics.catalog import events_to_frame
     p = sequences.DEFAULTS
     results = {}
@@ -178,8 +377,28 @@ def evaluate_sequences(seeds=(0, 1, 2, 3, 4)):
             pred = [label_of.get(out["assignments"].get(i), -1) for i in df["id"]]
             aris.append(adjusted_rand_score([truth_map[i] for i in df["id"]], pred))
         overlap.append({"eps_km": eps_km, "ari_mean": round(float(np.mean(aris)), 4)})
+    comparison = compare_cluster_methods(range(10))
+    default = next(iter(CLUSTER_METHODS))
+    if cat is not None and comparison["methods_passing_rule"]:
+        real = real_fragmentation(cat, meta, [default] + comparison["methods_passing_rule"])
+        worse = [m for m in comparison["methods_passing_rule"]
+                 if real[m]["share_of_mainshocks_below_half"] > real[default]["share_of_mainshocks_below_half"]]
+        comparison["real_catalogue_split_check"] = {
+            "results": real, "methods_splitting_real_sequences_more_often": worse,
+            "note": ("Added after the synthetic comparison: the synthetic clusters are compact (15 km spread) and contain "
+                     "no long ruptures, so a smaller eps was also checked on real M7.5+ aftershock zones. A method that "
+                     "leaves more mainshocks with under half of their 30-day zone events in their own sequence "
+                     "splits real sequences more often.")}
+        keep = [m for m in comparison["methods_passing_rule"] if m not in worse]
+        comparison["decision"] = (f"replace default with {keep[0]}" if keep else
+                                  "keep the default DBSCAN parameters: every method that passed the synthetic rule "
+                                  "splits real aftershock sequences more often")
+    elif comparison["methods_passing_rule"]:
+        comparison["decision"] += " (real-catalogue split check not run: no catalogue)"
     return {
         "overlapping_sequences_vs_eps_km": overlap,
+        "method_comparison": comparison,
+        "substructure_check_candidate": substructure_flag_rates(range(20), cat, meta),
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "data": "synthetic (clearly labelled); never shown as real catalogue events",
         "parameters": p, "seeds": list(seeds), "scenarios": results,
@@ -300,16 +519,22 @@ def _simulate(rng, mu, var, active, width):
     return S
 
 
+EXPECTED_STRATA = (0.0, 1.0, 2.0, 5.0, 10.0, np.inf)     # expected events in the observation window
+
+
 def _injection(C, ks, k, n, fdr, floors, specs):
     """
     Exhaustive injection. In every window ending at a column of `ks`, each tested region that the variant
     does not already flag gets ceil(f x expected) extra events, one region at a time, and BH is redone
-    across all tested regions. Returns {variant: {factor: [detected, unadjusted p <= 0.05, rolling rule, trials]}}.
+    across all tested regions. Returns {variant: {factor: [detected, unadjusted p <= 0.05, rolling rule, trials]}}
+    and {variant: {factor: (strata, 2) array of [detected, trials] by expected count}}.
     """
     res = {name: {f: np.zeros(4, np.int64) for f in INJECTION_FACTORS} for name in specs}
+    strata = {name: {f: np.zeros((len(EXPECTED_STRATA) - 1, 2), np.int64) for f in INJECTION_FACTORS} for name in specs}
     for kk in ks:
         cells, ref, obs = _tested(C[:, kk - k - n:kk], k, n)
         expected = ref.mean(axis=1) * k
+        band = np.searchsorted(EXPECTED_STRATA, expected, side="right") - 1
         for name, (floor, cond, recent) in specs.items():
             fl = floors[floor][cells]
             p = _variant_p(ref, obs, k, fl, cond, recent)
@@ -317,21 +542,34 @@ def _injection(C, ks, k, n, fdr, floors, specs):
             for f in INJECTION_FACTORS:
                 new_obs = obs[cand] + np.maximum(1, np.ceil(f * expected[cand])).astype(np.int64)
                 p_new = _variant_p(ref[cand], new_obs, k, fl[cand], cond, recent)
-                tally = res[name][f]
+                tally, st = res[name][f], strata[name][f]
                 for j, i in enumerate(cand):
                     pp = p.copy()
                     pp[i] = p_new[j]
-                    tally[0] += AN.benjamini_hochberg(pp)[i] <= fdr and new_obs[j] >= AN.MIN_OBSERVED
+                    hit = AN.benjamini_hochberg(pp)[i] <= fdr and new_obs[j] >= AN.MIN_OBSERVED
+                    tally[0] += hit
+                    st[band[i]] += (hit, 1)
                 tally[1] += int((p_new <= 0.05).sum())
                 tally[2] += int((new_obs >= np.maximum(2.0 * expected[cand], AN.MIN_OBSERVED)).sum())
                 tally[3] += len(cand)
-    return res
+    return res, strata
+
+
+def _strata_rates(st):
+    out = {}
+    for b, (det, trials) in enumerate(st):
+        lo, hi = EXPECTED_STRATA[b], EXPECTED_STRATA[b + 1]
+        out[f"{lo:g}-{hi:g}" if np.isfinite(hi) else f">={lo:g}"] = {
+            "trials": int(trials), "detection_rate": round(int(det) / max(int(trials), 1), 4),
+            "wilson95": wilson_interval(int(det), int(trials))}
+    return out
 
 
 def _injection_rates(tally):
     det, unadj, roll, trials = (int(v) for v in tally)
     t = max(trials, 1)
-    return {"trials": trials, "detection_rate": round(det / t, 4), "unadjusted_p_below_0.05_rate": round(unadj / t, 4),
+    return {"trials": trials, "detection_rate": round(det / t, 4), "detection_rate_wilson95": wilson_interval(det, trials),
+            "unadjusted_p_below_0.05_rate": round(unadj / t, 4),
             "baseline_rolling_rule_detection_rate": round(roll / t, 4)}
 
 
@@ -447,6 +685,7 @@ def evaluate_anomaly(cat, meta, window=4, ref=52, fdr=0.05, seed=7):
         "false_alert_rate_per_region_test": round(false_flags / max(tests, 1), 6),
         "share_of_runs_with_any_false_alert": round(share, 4),
         "share_of_runs_with_any_false_alert_se": round(float(np.sqrt(share * (1 - share) / NULL_RUNS)), 4),
+        "share_of_runs_with_any_false_alert_wilson95": wilson_interval(int(runs_flagged.sum()), NULL_RUNS),
         "share_of_runs_with_any_false_alert_first_200_runs": round(float(runs_flagged[:200].mean()), 4),
         "unadjusted_p_below_0.05_rate": round(unadjusted / max(tests, 1), 5),
         "baseline_rolling_rule_false_alert_rate": round(base_false / max(NULL_RUNS * len(active), 1), 6),
@@ -463,9 +702,16 @@ def evaluate_anomaly(cat, meta, window=4, ref=52, fdr=0.05, seed=7):
     # 3. Injection: add synthetic excess events to real windows, one region at a time (see _injection).
     ks_val = np.arange(k_train_end + window, k_val_end + 1, window)        # observation windows in 2016-2019
     ks_ho = np.arange(k_val_end + window, n_weeks + 1, window)             # held-out observation windows
-    inj_val = _injection(C, ks_val, window, ref, fdr, floors[4.5], VARIANTS)
-    inj_ho = _injection(C, ks_ho, window, ref, fdr, floors[4.5], VARIANTS)
+    inj_val, strata_val = _injection(C, ks_val, window, ref, fdr, floors[4.5], VARIANTS)
+    inj_ho, strata_ho = _injection(C, ks_ho, window, ref, fdr, floors[4.5], VARIANTS)
     out["synthetic_injection"] = {f"+{f:g}x_expected": _injection_rates(t) for f, t in inj_ho[ADOPTED].items()}
+    out["synthetic_injection_by_expected_count"] = {
+        "note": ("Detection by the region's expected count in the 4-week window. A +4x excess where 1 event is "
+                 "expected is 4 extra events, which no calibrated test can separate from chance among ~140 cells."),
+        "held_out": {nm: {f"+{f:g}x_expected": _strata_rates(st) for f, st in strata_ho[nm].items()}
+                     for nm in (ADOPTED, "conditional_moment_floor")},
+        "validation_2016_2019": {nm: {f"+{f:g}x_expected": _strata_rates(st) for f, st in strata_val[nm].items()}
+                                 for nm in (ADOPTED, "conditional_moment_floor")}}
     out["injection_construction"] = ("In every non-overlapping held-out window (M4.5, 4-week observation), each tested "
                                      "region not already flagged gets ceil(factor x expected) extra events in its "
                                      "last observation week, one region at a time; detection = flagged after BH "
@@ -484,12 +730,14 @@ def evaluate_anomaly(cat, meta, window=4, ref=52, fdr=0.05, seed=7):
 
     def detection(tallies):
         return {"trials": int(tallies[INJECTION_FACTORS[0]][3]),
-                **{f"+{f:g}x_expected": round(int(t[0]) / max(int(t[3]), 1), 4) for f, t in tallies.items()}}
+                **{f"+{f:g}x_expected": round(int(t[0]) / max(int(t[3]), 1), 4) for f, t in tallies.items()},
+                **{f"+{f:g}x_expected_wilson95": wilson_interval(int(t[0]), int(t[3])) for f, t in tallies.items()}}
 
     comparison = {}
     for nm in names:
         row = {"description": VARIANT_NOTES[nm],
                "null_runs_with_false_alert": round(float(any_flag[nm].mean()), 4),
+               "null_runs_with_false_alert_wilson95": wilson_interval(int(any_flag[nm].sum()), NULL_RUNS),
                "null_runs_with_false_alert_first_200_runs": round(float(any_flag[nm][:200].mean()), 4),
                "null_false_alert_rate_per_region_test": round(n_flags[nm] / max(tests, 1), 6)}
         if nm in VARIANTS:
@@ -529,7 +777,8 @@ def evaluate_anomaly(cat, meta, window=4, ref=52, fdr=0.05, seed=7):
                 by_setting.append({"threshold": thr, "window_weeks": w, "reference_weeks": n,
                                    "regions": int(len(act)), "runs": SETTING_RUNS,
                                    **{f"{nm}_runs_with_false_alert": round(v / SETTING_RUNS, 4)
-                                      for nm, v in hits.items()}})
+                                      for nm, v in hits.items()},
+                                   **{f"{nm}_wilson95": wilson_interval(v, SETTING_RUNS) for nm, v in hits.items()}})
     out["null_simulation_by_setting"] = by_setting
 
     # 6. Missing data: real global zero-event days, and the effect of removing days from the observation window.
@@ -565,18 +814,106 @@ def evaluate_anomaly(cat, meta, window=4, ref=52, fdr=0.05, seed=7):
         "note": ("Removing whole days lowers observed counts, so some elevated regions are missed; the gap check "
                  "reports those windows as data_incomplete instead of normal."),
     }
+    out["false_alert_diagnosis"] = _diagnose_false_alerts(C[:, k_train_end:k_val_end], mu, var, active, true_alpha,
+                                                          floors[4.5], window, ref, fdr, seed + 2)
     return out, reference
+
+
+DIAG_RUNS = 2000
+
+
+def _diagnose_false_alerts(valid, mu, var, active, true_alpha, floors, window, ref, fdr, seed):
+    """
+    Why does the adopted detector exceed 5% runs-with-a-false-alert in the NB null? Three nulls on a separate random
+    stream, each with the adopted test, the moment floor and the oracle test that knows the simulated dispersion:
+      nb_2016_2019                  - the null of section 2 (NB, 2016-2019 mean and variance per cell);
+      nb_dispersion_capped_at_floor - the same, but no cell is more overdispersed than its 2001-2015 floor;
+      empirical_weekly_bootstrap    - each cell's real 2016-2019 weekly counts resampled independently (real tails,
+                                      no NB assumption, no temporal clustering).
+    Also: the share of tested cells whose smallest attainable p-value already exceeds the FDR level (a discrete
+    multiplicity filter could only drop these).
+    """
+    rng = np.random.default_rng(seed)
+    capped_var = np.minimum(var, mu + floors["mle"] * mu ** 2)
+    tests = {ADOPTED: lambda R, obs, cells: _variant_p(R, obs, window, floors["mle"][cells], True, True),
+             "conditional_moment_floor": lambda R, obs, cells: _variant_p(R, obs, window, floors["moment"][cells], True, True),
+             "oracle_conditional_true_alpha": lambda R, obs, cells: _variant_p(R, obs, window, true_alpha[cells], True, False)}
+    out, unattainable, tested = {}, 0, 0
+    for null in ("nb_2016_2019", "nb_dispersion_capped_at_floor", "empirical_weekly_bootstrap_2016_2019"):
+        hits = dict.fromkeys(tests, 0)
+        for _ in range(DIAG_RUNS):
+            if null == "empirical_weekly_bootstrap_2016_2019":
+                S = np.zeros((regions.N_REGIONS, ref + window), np.int64)
+                S[active] = valid[active][np.arange(len(active))[:, None],
+                                          rng.integers(0, valid.shape[1], (len(active), ref + window))]
+            else:
+                S = _simulate(rng, mu, capped_var if null == "nb_dispersion_capped_at_floor" else var, active,
+                              ref + window)
+            cells, R, obs = _tested(S, window, ref, active)
+            for nm, fn in tests.items():
+                hits[nm] += bool(_elevated(fn(R, obs, cells), obs, fdr).any())
+            if null == "nb_2016_2019":
+                N = R.sum(axis=1) + obs
+                unattainable += int((AN.conditional_p_value(N, np.zeros_like(N), window, ref, floors["mle"][cells])
+                                     > fdr).sum())
+                tested += len(cells)
+        out[null] = {nm: {"runs_with_false_alert": round(h / DIAG_RUNS, 4),
+                          "wilson95": wilson_interval(h, DIAG_RUNS)} for nm, h in hits.items()}
+    over = active[true_alpha[active] > floors["mle"][active]]
+    return {
+        "runs_per_null": DIAG_RUNS, "nulls": out,
+        "cells_where_2016_2019_dispersion_exceeds_floor": int(len(over)), "cells_simulated": int(len(active)),
+        "share_of_tested_cells_that_cannot_reach_significance": round(unattainable / max(tested, 1), 5),
+        "interpretation": (
+            "If the capped null and the oracle stay near or below 5% while the uncapped null does not, the test itself "
+            "is calibrated and the excess comes from cells whose 2016-2019 dispersion exceeded the 2001-2015 floor "
+            "(a large sequence in a previously quieter cell). The empirical bootstrap places real sequence weeks at "
+            "random positions; a burst landing in the observation window is what the detector is meant to flag, so "
+            "its rate measures sensitivity to real bursts, not a false-alarm rate of a stationary process."),
+    }
 
 
 # =============================================================================
 # Module D — Omori-Utsu across historical sequences
 # =============================================================================
+INTERVAL_METHODS = ("poisson_plugin", "parameter_uncertainty", "parameter_uncertainty_nb")
+
+
+def calibrate_count_dispersion(observed, rate_draws_list):
+    """
+    NB2 dispersion d maximising sum_i log mean_s NB(obs_i | lam_is, d): the likelihood of each observed count under
+    the predictive mixture over parameter draws. 0 when a Poisson stage fits at least as well.
+    """
+    from scipy.optimize import minimize_scalar
+    from scipy.special import gammaln, logsumexp
+    pairs = [(float(y), np.asarray(lam, float)) for y, lam in zip(observed, rate_draws_list, strict=True)
+             if lam is not None and len(lam)]
+    if not pairs:
+        return 0.0
+
+    def loglik(d):
+        total = 0.0
+        for y, lam in pairs:
+            lam = np.maximum(lam, 1e-9)
+            if d <= 0:
+                lp = y * np.log(lam) - lam - gammaln(y + 1)
+            else:
+                r = 1.0 / d
+                lp = gammaln(y + r) - gammaln(r) - gammaln(y + 1) + r * np.log(r / (r + lam)) + y * np.log(lam / (r + lam))
+            total += logsumexp(lp) - math.log(len(lam))
+        return total
+
+    res = minimize_scalar(lambda ld: -loglik(math.exp(ld)), bounds=(-9.0, 3.0), method="bounded")
+    return float(math.exp(res.x)) if -res.fun > loglik(0.0) else 0.0
+
+
 def evaluate_aftershocks(cat, meta, min_main=7.0, fit_days=30.0, test_days=90.0, start_days=0.25, pre_days=365):
     t = cat["time"].to_numpy(np.int64)
     lat, lon, mag = cat["latitude"].to_numpy(), cat["longitude"].to_numpy(), cat["mag"].to_numpy(float)
     cand = np.flatnonzero((mag >= min_main) & (t >= meta["start_ms"] + pre_days * DAY_MS)
                           & (t <= meta["end_ms"] - test_days * DAY_MS))
     rows, excluded = [], {"larger_event_in_prior_30_days": 0, "larger_event_within_window": 0}
+    fits = {}
     for i in cand:
         R = AS.default_radius_km(mag[i])
         win = (t >= t[i] - pre_days * DAY_MS) & (t <= t[i] + test_days * DAY_MS)
@@ -606,9 +943,30 @@ def evaluate_aftershocks(cat, meta, min_main=7.0, fit_days=30.0, test_days=90.0,
             pred = AS.expected_count(fit, fit_days, test_days)
             last_week = ((post > fit_days - 7) & (post <= fit_days)).sum() / 7.0
             row.update(pred_omori_30_90=round(pred, 2), pred_last_week_rate=round(last_week * (test_days - fit_days), 2),
-                       pred_background=round(mu * (test_days - fit_days), 2))
+                       pred_background=round(mu * (test_days - fit_days), 2),
+                       n_fit_30=fit["n_events"], p_fit30=fit["parameters"]["p"], se_p_fit30=fit["standard_errors"]["p"])
+            for name, unc in (("poisson_plugin", False), ("parameter_uncertainty", True)):
+                pc = AS.predictive_count(fit, fit_days, test_days, levels=(0.8, 0.95), seed=int(i), n_draws=PRED_DRAWS,
+                                         include_parameter_uncertainty=unc)
+                if pc:
+                    row[f"interval_{name}"] = {"80": pc["interval_80"], "95": pc["interval_95"]}
+            fits[row["id"]] = (fit, int(i))
         rows.append(row)
     fitted = [r for r in rows if "pred_omori_30_90" in r]
+
+    # Count dispersion for the negative-binomial stage, calibrated ONLY on mainshocks before split_year
+    # and applied unchanged to later mainshocks (chronological separation).
+    split_year = 2013
+    calib = [r for r in fitted if int(r["time"][:4]) < split_year and fits[r["id"]][0].get("covariance")]
+    disp = calibrate_count_dispersion([r["observed_30_90"] for r in calib],
+                                      [AS.rate_draws(fits[r["id"]][0], fit_days, test_days, 1000, fits[r["id"]][1])
+                                       for r in calib])
+    for r in fitted:
+        fit, seed = fits[r["id"]]
+        pc = AS.predictive_count(fit, fit_days, test_days, levels=(0.8, 0.95), seed=seed, n_draws=PRED_DRAWS,
+                                 dispersion=disp)
+        if pc:
+            r["interval_parameter_uncertainty_nb"] = {"80": pc["interval_80"], "95": pc["interval_95"]}
 
     def lerr(key):
         e = [abs(math.log((r["observed_30_90"] + 1) / (r[key] + 1))) for r in fitted]
@@ -620,6 +978,55 @@ def evaluate_aftershocks(cat, meta, min_main=7.0, fit_days=30.0, test_days=90.0,
              <= stats.poisson.ppf(0.975, r["pred_omori_30_90"])
              for r in fitted]
         return round(float(np.mean(c)), 4) if c else None
+
+    def interval_summary(subset):
+        """Empirical coverage (Wilson 95% CI) and width of each predictive interval method on `subset`."""
+        out = {"sequences": len(subset)}
+        for name in INTERVAL_METHODS:
+            rs = [r for r in subset if f"interval_{name}" in r]
+            m = {}
+            for lv in ("80", "95"):
+                hit = [r[f"interval_{name}"][lv][0] <= r["observed_30_90"] <= r[f"interval_{name}"][lv][1] for r in rs]
+                widths = [r[f"interval_{name}"][lv][1] - r[f"interval_{name}"][lv][0] for r in rs]
+                rel = [(r[f"interval_{name}"][lv][1] + 1) / (r[f"interval_{name}"][lv][0] + 1) for r in rs]
+                m[lv] = {"coverage": round(float(np.mean(hit)), 4) if hit else None,
+                         "coverage_wilson95": wilson_interval(int(np.sum(hit)), len(hit)),
+                         "median_width_events": float(np.median(widths)) if widths else None,
+                         "median_ratio_upper_to_lower": round(float(np.median(rel)), 2) if rel else None}
+            out[name] = {"n": len(rs), **m}
+        return out
+
+    by_size = {"20-49 fit events": [r for r in fitted if r["n_fit_30"] < 50],
+               "50-149 fit events": [r for r in fitted if 50 <= r["n_fit_30"] < 150],
+               ">=150 fit events": [r for r in fitted if r["n_fit_30"] >= 150]}
+    by_mag = {"M7.0-7.4": [r for r in fitted if r["mag"] < 7.5], "M7.5+": [r for r in fitted if r["mag"] >= 7.5]}
+    intervals = {
+        "all": interval_summary(fitted),
+        f"mainshocks_before_{split_year}": interval_summary([r for r in fitted if int(r["time"][:4]) < split_year]),
+        f"mainshocks_{split_year}_and_later": interval_summary([r for r in fitted if int(r["time"][:4]) >= split_year]),
+        "by_fit_size": {k: interval_summary(v) for k, v in by_size.items()},
+        "by_magnitude": {k: interval_summary(v) for k, v in by_mag.items()},
+        "signed_median_log_ratio_observed_vs_omori": (
+            round(float(np.median([math.log((r["observed_30_90"] + 1) / (r["pred_omori_30_90"] + 1)) for r in fitted])), 4)
+            if fitted else None),
+        "share_observed_above_omori": (round(float(np.mean([r["observed_30_90"] > r["pred_omori_30_90"] for r in fitted])), 4)
+                                       if fitted else None),
+        "methods": {
+            "poisson_plugin": "Poisson quantiles around the fitted expected count (parameters treated as exact).",
+            "parameter_uncertainty": (f"Parametric simulation: {PRED_DRAWS} draws of (log K, [log c], p) from the MLE's "
+                                      "normal approximation (inverse Hessian), Poisson count per draw; nothing is tuned "
+                                      "on the evaluated sequences."),
+            "parameter_uncertainty_nb": ("As parameter_uncertainty, but the count per draw is negative binomial with "
+                                         "Var = lam + d * lam^2; d is fitted by maximum likelihood (mixture over the "
+                                         f"parameter draws) on mainshocks before {split_year} only."),
+        },
+        "count_dispersion_d": round(float(disp), 4),
+        "count_dispersion_calibration": {"mainshocks_before": split_year, "sequences": len(calib)},
+        "note": (f"poisson_plugin and parameter_uncertainty use only each sequence's own 0.25-30 day fit, so every "
+                 f"sequence is out of sample. parameter_uncertainty_nb borrows d from mainshocks before {split_year}: "
+                 f"only the mainshocks_{split_year}_and_later rows are out of sample for it (the earlier rows are "
+                 "in-sample and shown for comparison)."),
+    }
 
     status = {}
     for r in rows:
@@ -642,6 +1049,7 @@ def evaluate_aftershocks(cat, meta, min_main=7.0, fit_days=30.0, test_days=90.0,
             "median_abs_log_ratio_background_only": lerr("pred_background"),
             "poisson_95_coverage_omori": coverage(),
             "metric_note": "|log((observed+1)/(predicted+1))|; 0 is perfect. Coverage ignores parameter uncertainty.",
+            "predictive_intervals": intervals,
         },
         "limitations": ["M4.5+ global catalogue: only the largest aftershocks are seen, and early aftershocks are "
                         "missing while the mainshock coda masks them.",

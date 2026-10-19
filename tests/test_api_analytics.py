@@ -7,6 +7,8 @@ import pytest
 import app as app_module
 import config
 from analytics import aftershock as AS
+from analytics import anomaly as AN
+from analytics import forecast as FC
 from analytics import regions
 from analytics.forecast import ForecastModel
 from tests.conftest import collection, feature
@@ -76,6 +78,10 @@ def test_forecast_all_regions(client, fake_usgs):
     assert row["baselines"]["rolling_mean_4w"] == pytest.approx(2.0)
     assert "not say when" in body["interpretation"]
     assert body["model"]["test_metrics"] and body["data_window"]["events_downloaded"] > 0
+    model = app_module.forecast_models[4.5]
+    assert body["model"]["dispersion_curve"] == model.dispersion and "Shortest" in body["model"]["interval_method"]
+    lo, hi = FC.interval([row["expected"]], model.dispersion, 0.8)          # served interval = documented construction
+    assert row["interval_80"] == [int(lo[0]), int(hi[0])]
     q = fake_usgs.calls[0][1]
     assert q["minmagnitude"] == 4.5 and q["limit"] == config.USGS_QUERY_LIMIT
 
@@ -131,6 +137,7 @@ def test_anomalies_flag_a_burst_and_explain_it(client, fake_usgs):
     assert row["largest_event"]["mag"] == 6.1 and row["q_value"] <= 0.05
     assert "not a prediction" in body["interpretation"]
     assert body["data_quality"]["possible_gap_days_in_window"] == []
+    assert body["method_id"] == AN.METHOD_ID and "2001-2015 maximum-likelihood" in body["method"]
 
 
 def test_anomaly_region_detail_lists_contributing_events(client, fake_usgs):
@@ -225,6 +232,10 @@ def test_model_performance_reports_files_verbatim(client):
     assert body["sequences"]["scenarios"] and body["anomaly"]["null_simulation"]
     assert body["aftershock"]["out_of_sample_30_to_90_days"] and len(body["aftershock"]["sequences"]) <= 25
     assert body["legacy_severity_model"]["status"] == "loaded"
+    fc = body["forecast"]["4.5"]
+    assert fc["dispersion_curve"] == meta["dispersion_curve"] and fc["deviance_skill_ci95_week_bootstrap"]
+    assert body["anomaly"]["false_alert_diagnosis"]["nulls"] and body["sequences"]["method_comparison"]["decision"]
+    assert body["aftershock"]["out_of_sample_30_to_90_days"]["predictive_intervals"]["count_dispersion_d"] >= 0
 
 
 def test_health_lists_modules(client):

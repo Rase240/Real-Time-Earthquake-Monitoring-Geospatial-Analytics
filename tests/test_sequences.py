@@ -95,3 +95,35 @@ def test_ambiguous_border_event_is_reported():
     assert out["summary"]["sequence_count"] == 2
     assert out["summary"]["ambiguous_border_events"] == 1
     assert np.isfinite(out["sequences"][0]["linking"]["median_nearest_member_km"])
+
+
+def test_overlapping_sequences_merge_at_the_defaults():
+    """Known, documented failure: two overlapping synthetic sequences come out as one at the default parameters."""
+    score, out = ari("overlapping_sequences", seed=0)
+    assert len(out["sequences"]) == 1 and score == pytest.approx(0.0, abs=1e-9)
+    assert any("merged into one" in x for x in out["limitations"])
+    assert "substructure" not in out["sequences"][0]                  # the rejected candidate check is not served
+
+
+def test_substructure_candidate_flags_a_synthetic_merge_but_not_a_small_sequence():
+    events, _ = EV.scenario("overlapping_sequences", 0)
+    df, _ = events_to_frame(events)
+    X = SQ.scaled_coordinates(df["latitude"], df["longitude"], df["time"], 50, 72)
+    assert len(EV.substructure_groups(X)) >= 2
+    assert EV.substructure_groups(X[: EV.SUBSTRUCTURE_MIN_EVENTS - 1]) == []
+
+
+def test_merge_and_split_counts():
+    truth = [0, 0, 0, 0, 1, 1, 1, 1, -1]
+    assert EV.merges_splits(truth, [5, 5, 5, 5, 5, 5, 5, 5, -1])[:2] == (1, 0)      # one false merge
+    assert EV.merges_splits(truth, [1, 1, 2, 2, 3, 3, 3, 3, -1])[:2] == (0, 1)      # sequence 0 split in two
+    assert EV.merges_splits(truth, [1, 1, 1, -1, 2, 2, 2, 2, 2])[2] == pytest.approx(1 / 8)
+
+
+@pytest.mark.parametrize("name", ["overlap_30km_30h", "overlap_150km_30h"])
+def test_overlap_scenario_geometry(name):
+    events, truth = EV.scenario(name, 0)
+    assert set(truth.values()) == {0, 1} and len(events) == 50
+    assert sum(t == 0 for t in truth.values()) == 25
+    with pytest.raises(ValueError):
+        EV.scenario("not_a_scenario", 0)

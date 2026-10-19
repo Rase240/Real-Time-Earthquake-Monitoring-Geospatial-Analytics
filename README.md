@@ -135,6 +135,9 @@ Activate the virtual environment (Windows PowerShell: `.\.venv\Scripts\Activate.
 pip install -r requirements-dev.txt
 ```
 
+`requirements-dev.txt` adds the test runner and the linter (pytest, Ruff) to the runtime dependencies in
+`requirements.txt`; the app itself needs only `requirements.txt`.
+
 Run the app and open <http://127.0.0.1:5000>:
 
 ```bash
@@ -154,15 +157,15 @@ not committed):
 python ml_pipeline.py download
 ```
 
-Then train and evaluate everything and rebuild `docs/ml_evaluation.md` (≈ 6 minutes on a laptop CPU):
+Then train and evaluate everything and rebuild `docs/ml_evaluation.md` (≈ 10 minutes on a laptop CPU):
 
 ```bash
 python ml_pipeline.py all
 ```
 
-Single steps: `forecast`, `anomaly`, `sequences` (synthetic data only, no download needed), `aftershock`
-and `report`. Seeds are fixed. Two consecutive `all` runs on the same catalogue produced identical
-metrics. The remaining source of variation is the catalogue itself: USGS revises magnitudes and
+Single steps: `forecast`, `anomaly`, `sequences` (synthetic scenarios; the real-catalogue split check is
+skipped without a download), `aftershock` and `report`. Seeds are fixed. Repeated runs on the same
+catalogue produced identical artifacts apart from timestamps. The remaining source of variation is the catalogue itself: USGS revises magnitudes and
 locations over time, so a later download can change the numbers slightly. The served forecast
 artifacts depend on the scikit-learn version (pinned `<1.8`). A different version is refused at load
 time, not used.
@@ -195,11 +198,11 @@ All endpoints are `GET` and return JSON. Errors always look like
 | `/api/health` | — | Overall status, plus per-module readiness (`forecast` per threshold, `anomaly_long_term_dispersion`, `evaluations`) and cache ages. |
 | `/api/earthquakes` | `days` 1–30, `min_mag` −1–10 | Observed events (≤ 2000, newest first), truncation, query window, freshness. |
 | `/api/sequences` | `days`, `min_mag` as above; `eps_km` 5–500 (50), `eps_hours` 1–720 (72), `min_samples` 2–50 (4) | Sequences (id, counts, start/end, duration, magnitude and depth distributions and histograms, centroid, extent incl. antimeridian flag, linking statistics, member ids), compact events with assignments, summary, explanation, limitations. |
-| `/api/forecast` | `threshold` ∈ {4.5, 5.0} | Origin, valid window, target definition, model and test metrics, data window, and for each eligible cell: expected count, 80 % / 95 % intervals, P(≥1), baselines. |
+| `/api/forecast` | `threshold` ∈ {4.5, 5.0} | Origin, valid window, target definition, model (incl. `dispersion_curve`, `interval_method`) and test metrics, data window, and for each eligible cell: expected count, 80 % / 95 % intervals, P(≥1), baselines. |
 | `/api/forecast/<region>` | `threshold`; region id like `R+30+140` | The cell's forecast, 52 observed weekly counts, input features with units and definitions, walk-forward backtest series, and the cell's test metrics. |
-| `/api/anomalies` | `threshold` ∈ {4.5, 5.0}, `window_weeks` ∈ {1, 2, 4}, `reference_weeks` ∈ {26, 52}, `fdr` ∈ {0.01, 0.05, 0.1} | Observation and reference windows, data-quality block (possible gap days, dispersion source), method text, and for each cell: status, observed, expected, p, q, ratio, dispersion, largest event. |
+| `/api/anomalies` | `threshold` ∈ {4.5, 5.0}, `window_weeks` ∈ {1, 2, 4}, `reference_weeks` ∈ {26, 52}, `fdr` ∈ {0.01, 0.05, 0.1} | Observation and reference windows, data-quality block (possible gap days, dispersion source), `method_id` and method text, and for each cell: status, observed, expected, p, q, ratio, dispersion, largest event. |
 | `/api/anomalies/<region>` | same | The cell's result, weekly counts (reference + observation) and contributing events. |
-| `/api/aftershocks` | `event_id` (USGS id); `radius_km` 5–1000 (default: rupture-length rule); `pre_days` 0–365 (30); `post_days` 1–365 (60); `min_mag` 0–8 (4.5); `min_depth`, `max_depth` 0–800; `fit_start_hours` 0–72 (6) | Reference event, parameters, selection rules, statistics (daily, hourly, log-time bins, cumulative, histograms, pre/post test), fit (status, parameters, SE, 95 % CI, diagnostics, reasons/notes, curve inside the fit window), member events, data window. |
+| `/api/aftershocks` | `event_id` (USGS id); `radius_km` 5–1000 (default: rupture-length rule); `pre_days` 0–365 (30); `post_days` 1–365 (60); `min_mag` 0–8 (4.5); `min_depth`, `max_depth` 0–800; `fit_start_hours` 0–72 (6) | Reference event, parameters, selection rules, statistics (daily, hourly, log-time bins, cumulative, histograms, pre/post test), fit (status, parameters, SE, 95 % parameter CI, parameter covariance, diagnostics, reasons/notes, curve inside the fit window), member events, data window. |
 | `/api/model-performance` | — | Evaluation results of every module, read from `models/*.json`, and the legacy classifier. |
 | `/api/hotspots`, `/api/predict`, `/api/model-info`, `/api/plates` | as before | Observed activity cells; legacy conditional severity score and its metadata; plate boundaries. |
 
@@ -258,8 +261,12 @@ history download gives 503 `history_unavailable` ("No result was computed"). An 
   (chord/chord(ε_km))² + (Δt/ε_h)² ≤ 1. The spatial part is exact great-circle distance at Δt = 0, and
   the antimeridian and the poles need no special cases.
 * **Why DBSCAN.** It needs no cluster count, labels isolated events as noise, handles irregular shapes
-  and is deterministic. HDBSCAN would adapt to density differences, but it adds a dependency and is
-  harder to tune for users.
+  and is deterministic. Alternatives were compared on the same synthetic scenarios and on real M7.5+
+  aftershock zones (see Evaluation results). None replaced the defaults:
+  * smaller ε separates the synthetic overlap case but splits real aftershock sequences more often;
+  * HDBSCAN separates it but absorbs or drops noise elsewhere;
+  * a "possibly merged" check (HDBSCAN inside each sequence) caught every synthetic merge but also
+    fired on about a third of real M7+ aftershock sequences, so it is not served.
 * **What is not in the distance.** Depth and magnitude are excluded and only summarised afterwards.
 * **Outputs per sequence.** A stable id (hash of the earliest member's id), counts, time span,
   magnitude and depth statistics, a spherical centroid, extent with an antimeridian-aware longitude
@@ -300,8 +307,16 @@ history download gives 503 `history_unavailable` ("No result was computed"). An 
   Rule: the lowest validation mean Poisson deviance within each family. Trees are chosen over the GLM
   only if they are more than 1 % better (interpretability). The result: trees at M4.5 (2.3 % better on
   validation), the GLM at M5.0 (0.75 %).
-* **Uncertainty.** NB2 predictive distribution, Var = μ + αμ², with α fitted by maximum likelihood on
-  the validation predictions. Intervals are NB quantiles, and their test coverage is reported.
+* **Uncertainty.** NB2 predictive distribution, Var = μ + α(μ)μ², with α(μ) = exp(a + b·log μ) fitted by
+  maximum likelihood on the validation predictions. On validation, low-mean cells were relatively more
+  overdispersed (b ≈ −0.6). A 2-fold split inside validation beat one constant α at both thresholds
+  (NB log score 1.0598 → 1.0386 at M4.5, 0.7226 → 0.7188 at M5.0), so the curve is used.
+* **Intervals.** Counts are integers and most cells put more than 10 % of their probability on 0, so the
+  old equal-tailed "80 %" interval [q₀.₁, q₀.₉] actually held 93–97 % of the predictive probability. That,
+  not a wrong α, is why it covered about 95 % of test weeks. The served intervals are now the
+  **shortest** integer intervals holding at least the nominal probability. Their test coverage is
+  reported next to the *model-implied* coverage (the probability the forecast gives its own interval):
+  calibration means the two agree, not that coverage equals 80 %.
 * **Served model.** The selected configuration is refit on every available week. Its expected quality is
   the walk-forward test result.
 
@@ -344,6 +359,18 @@ evaluated, because it would remove the aftershock sequences this module mainly f
 Isolation Forest was not used: sparse, overdispersed counts need a count model with an explicit
 reference, and its scores would not be interpretable as p-values.
 
+**What "FDR 0.05" does and does not mean.** The test holds its level when weekly counts follow its NB
+model with a dispersion no larger than the one it uses: with the simulated dispersion capped at each
+cell's floor, 1.7 % of null runs had a false alert. The excess in the full null (5.6–7.65 % across
+independent random streams) comes from the 64 of 140 cells whose 2016–2019 dispersion exceeded their
+2001–2015 floor, usually because a large sequence struck a cell that had been quieter. Real weekly
+counts are burstier than any NB: when real 2016–2019 weeks are resampled at random, the detector fires
+in about 40 % of runs, because a resampled sequence week landing in the window is exactly what it is
+built to flag. So the FDR level is a property of the model, not a real-world false-alarm rate. Raising
+the dispersion floor (the moment floor) lowers simulated false alerts to 3.5–4.9 % but more than halves
+detection, so the MLE floor was kept. A discrete (Tarone-type) multiplicity filter was also checked; no
+tested cell was unable to reach significance, so it would change nothing.
+
 ### Module D — aftershock analysis
 
 * **Selection rules** (deterministic):
@@ -368,6 +395,11 @@ reference, and its scores would not be interpretable as p-values.
 
   Otherwise the observed data are shown with the reasons. The fitted curve is drawn only inside the fit
   window, with no extrapolation.
+* **Parameter vs predictive uncertainty.** The 95 % intervals shown for K, c and p are Wald confidence
+  intervals for the *parameters* (from the inverse Hessian, also returned as `covariance`). They are not
+  prediction intervals for future counts, which must add count variability and are much wider.
+  Predictive intervals were evaluated offline only (`analytics.aftershock.predictive_count`) and are not
+  shown in the app (see Evaluation results).
 
 ## Evaluation results
 
@@ -378,30 +410,50 @@ to 2026-10-19). Full tables: [`docs/ml_evaluation.md`](docs/ml_evaluation.md).
 
 | Model | MAE | RMSE | Mean Poisson deviance | NB log score | 80 % cov. | 95 % cov. |
 |---|---:|---:|---:|---:|---:|---:|
-| **Gradient boosting (selected)** | **0.933** | 4.644 | **1.985** | **1.091** | 0.958 | 0.985 |
-| Poisson GLM | 0.963 | **4.609** | 2.027 | 1.101 | 0.958 | 0.985 |
-| Historical mean | 0.966 | 4.787 | 2.304 | 1.129 | 0.952 | 0.982 |
-| Rolling 52-week mean | 0.971 | 4.765 | 2.175 | 1.114 | 0.952 | 0.981 |
-| Rolling 4-week mean | 1.003 | 5.019 | 4.030 | 2.015 | 0.916 | 0.936 |
+| **Gradient boosting (selected)** | **0.933** | 4.644 | **1.985** | **1.065** | 0.889 | 0.977 |
+| Poisson GLM | 0.963 | **4.609** | 2.027 | 1.079 | 0.888 | 0.978 |
+| Historical mean | 0.966 | 4.787 | 2.304 | 1.100 | 0.876 | 0.972 |
+| Rolling 52-week mean | 0.971 | 4.765 | 2.175 | 1.090 | 0.883 | 0.972 |
+| Rolling 4-week mean | 1.003 | 5.019 | 4.030 | 1.917 | 0.850 | 0.921 |
 
-* The selected model has 13.9 % lower deviance than the historical mean and 8.7 % lower than the
-  52-week mean.
+* The selected model has 13.9 % lower deviance than the historical mean (95 % interval from resampling
+  whole weeks: 10.3–17.3 %) and 8.7 % lower than the 52-week mean (6.5–10.9 %).
 * It is better than the historical mean in every test year.
 * The MAE gain is small (0.933 vs 0.966).
-* By cell it is mixed: the model has higher deviance than the historical mean in 64 of 131 cells.
-  The overall gain comes mostly from active cells with ongoing sequences.
+* By cell it is mixed: it beats the historical mean in 67 of 131 cells and the 52-week mean in 94. The
+  gain grows with activity (deviance skill vs historical mean +3 % in the least active third of cells,
+  +19 % in the most active). Per-cell skill is noisy and not a ranking.
 
 **Forecast, M5.0 (24 072 cell-weeks):**
 
-* The selected Poisson GLM has deviance 1.310 against 1.402 for the historical mean (6.6 % better),
-  and a better NB log score (0.740 vs 0.756).
+* The selected Poisson GLM has deviance 1.310 against 1.402 for the historical mean (6.6 % better,
+  interval 2.9–9.9 %), and a better NB log score (0.736 vs 0.743).
 * Its **MAE is slightly worse** (0.553 vs 0.546 for the historical mean and 0.530 for the 52-week mean).
-* It is worse than the historical mean in 44 of 68 cells.
-* Trees, not selected on validation, were 1.5 % better on test.
+  The mean minimises deviance, not MAE, so this is expected for skewed counts.
+* It beats the historical mean in only **24 of 68 cells**: the aggregate gain at M5.0 comes from a minority
+  of active cells.
+* Trees, not selected on validation, were 1.5 % better on test (interval −3.1 to +0.2 %). This was not
+  used to change the selection.
 
-**Intervals.** At both thresholds the intervals are **conservative**: 80 % intervals covered about
-95–96 % of test weeks. This is because counts are discrete and mostly 0 or 1, and one α is shared by
-all cells.
+**Intervals (test, selected model):**
+
+| Threshold | Construction | Empirical 80 % coverage | Model-implied | Mean width (events) |
+|---|---|---:|---:|---:|
+| M4.5 | equal-tailed, one α (previous) | 0.958 | 0.942 | 2.86 |
+| M4.5 | shortest, α(μ) (served) | 0.889 | 0.863 | 1.61 |
+| M5.0 | equal-tailed, one α (previous) | 0.966 | 0.950 | 1.51 |
+| M5.0 | shortest, α(μ) (served) | 0.889 | 0.869 | 0.60 |
+
+The served 80 % intervals are 44 % (M4.5) and 60 % (M5.0) narrower. They still cover a little more than
+they claim (0.889 vs 0.863–0.869), and the randomised PIT has too few weeks in its top decile (0.077–0.079
+instead of 0.100): the predictive upper tail is still slightly too heavy. The test NB log score
+improved at both thresholds (1.091 → 1.065 and 0.740 → 0.736).
+
+**Features.** Three origin-time features were tried on validation only: an Omori-weighted (1/lag) sum of
+the last 52 weekly counts, the largest week in 52, and the 52-week neighbour mean. The rule, fixed
+before the run, was to adopt them only if the selected family improved validation deviance by more than
+1 % in both halves of the validation period. They improved it by 0.67 % (M4.5) and 0.68 % (M5.0), so they
+were not added.
 
 **Sequence clustering (synthetic, 5 seeds; the labels are synthetic, not real events):**
 
@@ -412,21 +464,37 @@ all cells.
   Ignoring time scores 0 on same place, different times.
 * **Two overlapping sequences 60 km apart merge** at the default ε = 50 km (ARI 0). They separate only
   at ε ≈ 15 km (ARI 0.82).
+* **Alternatives** (10 seeds, 12 scenarios incl. overlaps at 30–150 km and a dense/sparse pair): mean ARI
+  0.817 for the default, 0.844 for ε 25 km, 0.824 for 72→24 h, 0.778 for ε 15 km, 0.785/0.766 for HDBSCAN.
+  The rule fixed before the comparison (higher mean ARI, no scenario more than 0.02 worse) was passed by
+  ε 25 km and by 24 h. Because the synthetic clusters are compact, both were then checked on 99 real
+  M7.5+ aftershock zones (added after seeing the synthetic result): the share of mainshocks with less
+  than half of their 30-day zone events in their own sequence rose from 8 % (default) to 25 % (ε 25 km)
+  and 17 % (24 h). They split real sequences more often, so the defaults stay.
+* At 30 km and 30 h apart, no method separated the two sequences; catalogue locations and times alone
+  cannot always resolve them.
 
 **Anomaly detection:**
 
 * **Null simulation** (2 000 runs × 140 cells, stationary NB counts from 2016–2019, M4.5, 4-week window):
-  * 5.6 % of runs had at least one false alert (standard error 0.5 %; nominal 5 %), against 13.65 % for
-    the previous plug-in test. On the first 200 runs, identical to the earlier evaluation, the rate fell
-    from 12 % to 4.5 %.
+  * 5.6 % of runs had at least one false alert (95 % CI 4.7–6.7 %; nominal 5 %), against 13.65 % for
+    the previous plug-in test. An independent random stream of the same null gave 7.65 % (6.6–8.9 %), so
+    the realistic figure is about 6–7 %, not 5.6 %.
   * The false-alert rate per cell test was 0.046 %. The rolling 2× rule's was 10.2 %.
-  * Across all 12 threshold/window/reference settings the rate is below the previous test's, but above
-    5 % in 7 of them (worst 8.1 %, M4.5 with a 4-week window and 26-week reference).
+  * Across all 12 threshold/window/reference settings the rate is below the previous test's. It is above
+    5 % in 7 of them, and in 4 (all M4.5) the whole 95 % interval is above 5 % (worst 8.1 %, 6.6–10.0 %,
+    with a 4-week window and 26-week reference).
+  * Cause (separate stream, 2 000 runs per null): with each cell's simulated dispersion capped at its
+    2001–2015 floor the rate is 1.7 %, and with the true dispersion 1.8 %. The test is calibrated when
+    its dispersion is right; the excess comes from cells whose dispersion rose after 2015.
 * **Injected excess** (every unflagged cell of each of the 88 held-out windows, 12 592 trials per
   factor):
   * detection after BH was 0.1 %, 0.4 %, 3.3 % and 15.1 % at +0.5×, +1×, +2× and +4× the expected count
     (previous test: 1.6 % at +2× and 9.1 % at +4×);
   * for comparison, unadjusted p ≤ 0.05 reached 60 % at +4× and the rolling rule 91 %.
+  * The low overall rate is mostly a sparse-count effect: at +4×, detection is 0.4 % in cells expecting
+    under 1 event per window and 2.4 % at 1–2 events (63 % of trials together), but 16 % at 2–5, 57 % at
+    5–10 and 63 % at 10 or more.
   * The detector is conservative and flags only strong excesses.
 * **Held-out 2020–2026, M4.5, 4-week windows:** 80 flags in 88 runs (previous test: 70). There is no
   ground truth, so more flags is not evidence of better detection.
@@ -438,7 +506,16 @@ all cells.
   reliable fits 1.32 (IQR 1.09–1.62).
 * Out of sample (fit days 0.25–30, predict days 30–90, 103 sequences), median |log ratio| was 0.41
   for Omori–Utsu, 0.94 for the last-week rate and 1.25 for the background rate alone.
-* The Poisson 95 % coverage was only 0.58, because parameter uncertainty and secondary sequences are ignored.
+* The Poisson 95 % coverage was only 0.58. The prediction is unbiased (median signed log ratio +0.02),
+  so the intervals were too narrow, for two reasons:
+  * parameter uncertainty: propagating the fit's covariance lifts 80 %/95 % coverage to 0.67/0.82;
+  * extra-Poisson variability (secondary aftershocks, misspecification), which grows with sequence size:
+    with parameter uncertainty alone, sequences with ≥ 150 fit events were covered only 41 %/55 %.
+* Adding a negative-binomial count stage, with its dispersion (d = 0.19) fitted only on mainshocks before
+  2013, gave **0.81 (0.68–0.90) / 0.91 (0.80–0.97)** coverage on the 47 later mainshocks, out of sample.
+  The price is width: the median 95 % interval spans 34 events, upper bound about 12× the lower.
+* These predictive intervals are evaluated offline only. The app shows fitted decay of past data, never
+  a forecast of future aftershocks.
 
 **Legacy classifier** (point analysis, unchanged): test ROC-AUC 0.570 against 0.500 for the base rate.
 It is exploratory.
@@ -446,19 +523,24 @@ It is exploratory.
 ## Limitations
 
 * Forecasts are cell-level aggregates. Most of their skill is persistence of ongoing sequences, and they
-  cannot anticipate a sequence that has not started. One α for all cells makes intervals conservative
-  overall and miscalibrated in some cells.
+  cannot anticipate a sequence that has not started. The dispersion depends on the predicted mean but
+  not on the cell, so intervals are still miscalibrated in some cells, and they remain slightly too wide
+  overall. At M5.0 the model beats the historical mean in only a third of cells.
 * Cells are equal-angle (smaller near the poles). Catalogue completeness differs by region and over time.
 * Live forecast features use the USGS feed up to the start of the current UTC day. Events posted late
   lower the most recent count.
-* DBSCAN uses one density threshold everywhere, merges overlapping sequences at large ε, and cuts
-  sequences at the window edges. There is no ground truth for real sequences.
-* The anomaly test is conservative (15 % detection at +4× the expected count). Its run-level
-  false-alert rate under the null is 5.6 % at the default setting and up to 8.1 % with a 26-week
-  reference. The excess comes from cells whose 2016–2019 dispersion far exceeds their 2001–2015
-  record. It flags sequences after large earthquakes, by design. It does not test for quiescence.
+* DBSCAN uses one density threshold everywhere, merges sequences that overlap within tens of km and about
+  a day, and cuts sequences at the window edges. No tested alternative fixed the merges without splitting
+  real sequences. There is no ground truth for real sequences.
+* The anomaly test is conservative (15 % detection at +4× the expected count, near zero where a cell
+  expects under 2 events). Its run-level false-alert rate under the NB null is about 6–7 % at the default
+  setting and up to 8.1 % with a 26-week reference, from cells whose dispersion rose after 2015. Under
+  resampled real weeks it fires far more often, so "FDR 0.05" is not a real-world false-alarm rate. It
+  flags sequences after large earthquakes, by design. It does not test for quiescence.
 * Omori–Utsu fits at M4.5+ see few events per sequence. The default radius is a heuristic, and
-  overlapping sequences and the exclusion of complex sequences bias the historical evaluation.
+  overlapping sequences and the exclusion of complex sequences bias the historical evaluation. Calibrated
+  30→90-day predictive intervals exist only offline, for M7+ mainshocks at M4.5+; they were not validated
+  for other magnitudes, radii or horizons, so the app does not show forecasts.
 * Caches are per process (single-process development server). The analytical history is a ~9 000-event
   in-memory table.
 
@@ -474,20 +556,24 @@ node --test "tests/frontend/*.test.js"
 
 * **Offline.** pytest never contacts USGS: `tests/conftest.py` injects a fake transport, with per-query
   handlers for the event lookup and the radius search.
-* **Backend coverage** (188 tests):
+* **Backend coverage** (217 tests):
   * USGS parsing, retries and failures;
   * geometry: antimeridian, poles, centroid, longitude span;
   * the region grid and week-bin boundaries;
   * feature definitions against hand calculations, no look-ahead, and training/serving equality;
-  * dispersion MLE recovery, interval and deviance maths;
+  * dispersion MLE and dispersion-curve recovery; shortest intervals checked by brute force; model-implied
+    coverage, randomised PIT and the week-bootstrap skill interval;
   * a full walk-forward training run on synthetic data, checking period ordering per fold;
   * artifact loading and refusal of incompatible artifacts;
   * DBSCAN edge cases (antimeridian, high latitude, time separation, ambiguous border events, missing
     magnitudes, stable ids);
   * Benjamini–Hochberg values, the conditional test (exact against the NB convolution, level held for
-    any mean), dispersion MLE robustness, insufficient reference, gap handling;
-  * Omori–Utsu parameter recovery on simulated sequences, insufficient data, and rejection of
-    constant-rate data;
+    any mean, accurate far in the upper tail), consistency of every reported row field (expected,
+    dispersion, p, q, status), dispersion MLE robustness, insufficient reference, gap handling, Wilson
+    intervals against SciPy, reproducible null simulation, injection strata, artifact/method agreement;
+  * Omori–Utsu parameter recovery on simulated sequences, insufficient data, rejection of constant-rate
+    data, covariance vs standard errors, predictive counts (Poisson limit, widening with parameter and
+    count uncertainty, determinism) and recovery of the count dispersion;
   * the contract of every endpoint, including error codes, caching, truncation and model-unavailable behaviour.
 * **Frontend coverage** (26 tests): feed validation and statistics, validation of every analytical
   response, superseded requests, sequence-layer highlighting, explanation texts, comparison rules, and
@@ -497,17 +583,22 @@ node --test "tests/frontend/*.test.js"
 
 | Check | Result |
 |---|---|
-| `python -m pytest -q` | 188 passed |
+| `python -m pytest -q` | 217 passed |
 | `node --test "tests/frontend/*.test.js"` | 26 passed |
-| `ruff check .` (ruff 0.17.1 from a separate tool venv; config in `ruff.toml`) | no findings |
-| `pip-audit -r requirements.txt -r requirements-dev.txt -r requirements-docs.txt` | no known vulnerabilities |
+| `ruff check .` (ruff 0.17.1, now pinned in `requirements-dev.txt`; config in `ruff.toml`) | no findings |
+| `pip-audit --path .venv/Lib/site-packages` (pip-audit in a separate throwaway venv) | no known vulnerabilities in the project's dependencies; 6 advisories in the venv's own installer, pip 25.0.1 (fixed in pip ≥ 26.2; upgrade with `python -m pip install --upgrade pip`) |
 | `python docs/build_guide.py` | all source excerpts verified verbatim; PDF rebuilt |
-| `python ml_pipeline.py all` twice | identical metrics (timestamps aside) |
-| Live server against real USGS | All views computed real results: 131 forecasts, 145 cells tested (2 elevated: the Panama M7.7 and New Caledonia M6.7 sequences), 60 sequences in 30 days of M2.5+, Omori–Utsu fit for us6000u18k (p = 1.21, 95 % CI 0.92–1.49) |
-| Browser (in-app Chromium, 1440×900 and 375×812) | Every view renders without console errors. Selection, highlighting, charts, retry and hand-offs (anomaly → aftershock, sequence → aftershock) work. No horizontal page scroll on mobile. With an empty model directory: forecast shows "unavailable", performance shows "not evaluated yet", anomaly falls back with a notice, live monitor unaffected. |
+| Reproduction before changes | all five committed `models/*.json` reproduced exactly from the code and catalogue |
+| `python ml_pipeline.py all` after the changes, run twice | identical artifacts apart from timestamps; forecast `.joblib` files and `anomaly_reference.json` unchanged from before |
+| Live server against real USGS | 131 forecasts (M4.5) with the new intervals, 144 cells tested (2 elevated), 60 sequences in 30 days of M2.5+ |
+| Browser (in-app Chromium, desktop size) | Model Performance renders every new block (skill intervals, model-implied coverage, false-alert diagnosis, clustering alternatives, aftershock predictive coverage) without console errors; Sequence Explorer runs on the live feed. |
 
-Not verified: sustained USGS rate limiting (simulated only), memory under long uptime, browsers other
-than Chromium, and screen-reader behaviour beyond ARIA roles and labels.
+Not re-verified after these changes: the mobile layout, the empty-model-directory states, the anomaly →
+aftershock hand-offs, and the screenshots in `docs/images/` (taken before; the views they show have not
+changed visually except the Model Performance tables). Also not verified: sustained USGS rate limiting
+(simulated only), memory under long uptime, browsers other than Chromium, and screen-reader behaviour
+beyond ARIA roles and labels. Known display bug: the "Test deviance by year" chart labels its year
+axis "2k" instead of the year.
 
 ## Troubleshooting
 
@@ -523,7 +614,10 @@ than Chromium, and screen-reader behaviour beyond ARIA roles and labels.
 ## Future work
 
 * Rate-based (per-area) comparisons, and an equal-area grid or tectonic regionalisation.
-* Per-cell or covariate-dependent dispersion for better-calibrated forecast intervals.
+* Per-cell (or tectonic-regime) dispersion: the mean-dependent α(μ) improved calibration overall, but
+  coverage still varies by cell.
+* Serving aftershock predictive intervals only after validating them for other magnitudes, radii and
+  horizons than the offline M7+ / 30→90-day setting.
 * ETAS modelling (space-time branching) instead of separate DBSCAN and Omori–Utsu steps.
 * Declustering before anomaly testing, to separate background-rate changes from aftershock sequences.
 * Magnitude-of-completeness estimation (e.g. maximum curvature) per region and time.

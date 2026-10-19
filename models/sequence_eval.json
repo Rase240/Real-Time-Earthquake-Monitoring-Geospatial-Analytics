@@ -17,7 +17,807 @@
    "ari_mean": 0.0
   }
  ],
- "generated_at": "2026-10-19T01:31:51Z",
+ "method_comparison": {
+  "scenarios": {
+   "dense_clusters_with_noise": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.9895,
+     "ari_min": 0.9649,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.006
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.9103,
+     "ari_min": 0.8847,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.052
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 0.9918,
+     "ari_min": 0.9652,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0047
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.9743,
+     "ari_min": 0.9417,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0147
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 0.4921,
+     "ari_min": 0.4398,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 0.5101,
+     "ari_min": 0.4484,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    }
+   },
+   "simultaneous_separated": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.9922,
+     "ari_min": 0.9608,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.004
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.8175,
+     "ari_min": 0.6946,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.1
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.9724,
+     "ari_min": 0.9198,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.014
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    }
+   },
+   "same_place_separated_in_time": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.9922,
+     "ari_min": 0.9608,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.004
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.8175,
+     "ari_min": 0.6946,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.1
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.9724,
+     "ari_min": 0.9198,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.014
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    }
+   },
+   "overlapping_sequences": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 0.0,
+     "ari_min": 0.0,
+     "false_merges_mean": 1.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.2,
+     "ari_min": 0.0,
+     "false_merges_mean": 0.8,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.004
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.8067,
+     "ari_min": 0.6653,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.098
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 0.0,
+     "ari_min": 0.0,
+     "false_merges_mean": 1.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.3879,
+     "ari_min": -0.0031,
+     "false_merges_mean": 0.6,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.014
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 0.868,
+     "ari_min": 0.7029,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.062
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 0.868,
+     "ari_min": 0.7029,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.062
+    }
+   },
+   "antimeridian": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.9933,
+     "ari_min": 0.9333,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0033
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.8831,
+     "ari_min": 0.6893,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.06
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.98,
+     "ari_min": 0.9333,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.01
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 0.4937,
+     "ari_min": 0.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.1
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 0.2912,
+     "ari_min": 0.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.4
+    }
+   },
+   "high_latitude": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.9966,
+     "ari_min": 0.9665,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0017
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.8875,
+     "ari_min": 0.8085,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0567
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 0.9966,
+     "ari_min": 0.9665,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0017
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.9799,
+     "ari_min": 0.9665,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.01
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 0.875,
+     "ari_min": 0.8121,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 0.9125,
+     "ari_min": 0.8592,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    }
+   },
+   "duplicates_and_invalid": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.992,
+     "ari_min": 0.92,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0033
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.8606,
+     "ari_min": 0.6328,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.06
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.976,
+     "ari_min": 0.92,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.01
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 0.4622,
+     "ari_min": 0.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.2
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 0.3331,
+     "ari_min": 0.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.6
+    }
+   },
+   "overlap_30km_30h": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 0.0,
+     "ari_min": 0.0,
+     "false_merges_mean": 1.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.0,
+     "ari_min": 0.0,
+     "false_merges_mean": 1.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.004
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.0081,
+     "ari_min": -0.0031,
+     "false_merges_mean": 1.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.066
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 0.0,
+     "ari_min": 0.0,
+     "false_merges_mean": 1.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": -0.0003,
+     "ari_min": -0.0031,
+     "false_merges_mean": 1.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.012
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 0.4451,
+     "ari_min": 0.239,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.278
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 0.4625,
+     "ari_min": 0.2551,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.266
+    }
+   },
+   "overlap_100km_30h": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 0.9,
+     "ari_min": 0.0,
+     "false_merges_mean": 0.1,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.9922,
+     "ari_min": 0.9608,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.004
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.8175,
+     "ari_min": 0.6946,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.1
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 0.9,
+     "ari_min": 0.0,
+     "false_merges_mean": 0.1,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.9724,
+     "ari_min": 0.9198,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.014
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    }
+   },
+   "overlap_150km_30h": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.9922,
+     "ari_min": 0.9608,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.004
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.8175,
+     "ari_min": 0.6946,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.1
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.9724,
+     "ari_min": 0.9198,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.014
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    }
+   },
+   "overlap_60km_120h": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 0.9,
+     "ari_min": 0.0,
+     "false_merges_mean": 0.1,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.9922,
+     "ari_min": 0.9608,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.004
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.8175,
+     "ari_min": 0.6946,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.1
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.9724,
+     "ari_min": 0.9198,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.014
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    }
+   },
+   "density_contrast": {
+    "dbscan_50km_72h (default)": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_72h": {
+     "ari_mean": 0.9936,
+     "ari_min": 0.9742,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0034
+    },
+    "dbscan_15km_72h": {
+     "ari_mean": 0.8987,
+     "ari_min": 0.8272,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0466
+    },
+    "dbscan_50km_24h": {
+     "ari_mean": 1.0,
+     "ari_min": 1.0,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "dbscan_25km_36h": {
+     "ari_mean": 0.9859,
+     "ari_min": 0.9742,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0068
+    },
+    "hdbscan_mcs5": {
+     "ari_mean": 0.7842,
+     "ari_min": 0.7354,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    },
+    "hdbscan_mcs8": {
+     "ari_mean": 0.8108,
+     "ari_min": 0.7583,
+     "false_merges_mean": 0.0,
+     "false_splits_mean": 0.0,
+     "unassigned_member_share": 0.0
+    }
+   }
+  },
+  "mean_ari_over_scenarios": {
+   "dbscan_50km_72h (default)": 0.8167,
+   "dbscan_25km_72h": 0.8438,
+   "dbscan_15km_72h": 0.7785,
+   "dbscan_50km_24h": 0.824,
+   "dbscan_25km_36h": 0.8455,
+   "hdbscan_mcs5": 0.785,
+   "hdbscan_mcs8": 0.7657
+  },
+  "largest_ari_drop_vs_default": {
+   "dbscan_50km_72h (default)": 0.0,
+   "dbscan_25km_72h": 0.0105,
+   "dbscan_15km_72h": 0.1825,
+   "dbscan_50km_24h": 0.0082,
+   "dbscan_25km_36h": 0.0276,
+   "hdbscan_mcs5": 0.5378,
+   "hdbscan_mcs8": 0.7088
+  },
+  "selection_rule": "Replace the default only if a method has a higher mean ARI over all scenarios AND no scenario's mean ARI falls by more than 0.02 (fixed before the comparison was run).",
+  "methods_passing_rule": [
+   "dbscan_25km_72h",
+   "dbscan_50km_24h"
+  ],
+  "decision": "keep the default DBSCAN parameters: every method that passed the synthetic rule splits real aftershock sequences more often",
+  "real_catalogue_split_check": {
+   "results": {
+    "dbscan_50km_72h (default)": {
+     "mainshocks": 99,
+     "median_share_in_mainshock_sequence": 0.8434,
+     "share_of_mainshocks_below_half": 0.0808,
+     "share_of_mainshocks_below_half_wilson95": [
+      0.0415,
+      0.1514
+     ]
+    },
+    "dbscan_25km_72h": {
+     "mainshocks": 99,
+     "median_share_in_mainshock_sequence": 0.6944,
+     "share_of_mainshocks_below_half": 0.2525,
+     "share_of_mainshocks_below_half_wilson95": [
+      0.1773,
+      0.3462
+     ]
+    },
+    "dbscan_50km_24h": {
+     "mainshocks": 99,
+     "median_share_in_mainshock_sequence": 0.6809,
+     "share_of_mainshocks_below_half": 0.1717,
+     "share_of_mainshocks_below_half_wilson95": [
+      0.1101,
+      0.2579
+     ]
+    }
+   },
+   "methods_splitting_real_sequences_more_often": [
+    "dbscan_25km_72h",
+    "dbscan_50km_24h"
+   ],
+   "note": "Added after the synthetic comparison: the synthetic clusters are compact (15 km spread) and contain no long ruptures, so a smaller eps was also checked on real M7.5+ aftershock zones. A method that leaves more mainshocks with under half of their 30-day zone events in their own sequence splits real sequences more often."
+  }
+ },
+ "substructure_check_candidate": {
+  "by_scenario": {
+   "dense_clusters_with_noise": {
+    "merged_sequences": 0,
+    "flagged_merged": 0,
+    "single_sequences": 100,
+    "flagged_single": 10
+   },
+   "simultaneous_separated": {
+    "merged_sequences": 0,
+    "flagged_merged": 0,
+    "single_sequences": 40,
+    "flagged_single": 2
+   },
+   "same_place_separated_in_time": {
+    "merged_sequences": 0,
+    "flagged_merged": 0,
+    "single_sequences": 40,
+    "flagged_single": 2
+   },
+   "overlapping_sequences": {
+    "merged_sequences": 20,
+    "flagged_merged": 20,
+    "single_sequences": 0,
+    "flagged_single": 0
+   },
+   "antimeridian": {
+    "merged_sequences": 0,
+    "flagged_merged": 0,
+    "single_sequences": 20,
+    "flagged_single": 2
+   },
+   "high_latitude": {
+    "merged_sequences": 0,
+    "flagged_merged": 0,
+    "single_sequences": 40,
+    "flagged_single": 3
+   },
+   "duplicates_and_invalid": {
+    "merged_sequences": 0,
+    "flagged_merged": 0,
+    "single_sequences": 20,
+    "flagged_single": 2
+   },
+   "overlap_30km_30h": {
+    "merged_sequences": 20,
+    "flagged_merged": 20,
+    "single_sequences": 0,
+    "flagged_single": 0
+   },
+   "overlap_100km_30h": {
+    "merged_sequences": 1,
+    "flagged_merged": 1,
+    "single_sequences": 38,
+    "flagged_single": 2
+   },
+   "overlap_150km_30h": {
+    "merged_sequences": 0,
+    "flagged_merged": 0,
+    "single_sequences": 40,
+    "flagged_single": 2
+   },
+   "overlap_60km_120h": {
+    "merged_sequences": 1,
+    "flagged_merged": 1,
+    "single_sequences": 38,
+    "flagged_single": 2
+   },
+   "density_contrast": {
+    "merged_sequences": 0,
+    "flagged_merged": 0,
+    "single_sequences": 20,
+    "flagged_single": 0
+   }
+  },
+  "seeds": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19
+  ],
+  "total": {
+   "merged_sequences": 42,
+   "flagged_merged": 42,
+   "single_sequences": 396,
+   "flagged_single": 27,
+   "hit_rate": 1.0,
+   "hit_rate_wilson95": [
+    0.9162,
+    1.0
+   ],
+   "false_flag_rate": 0.0682,
+   "false_flag_rate_wilson95": [
+    0.0473,
+    0.0974
+   ]
+  },
+  "real_m7_mainshock_sequences": {
+   "checked": 177,
+   "flagged": 53,
+   "flag_rate": 0.2994,
+   "flag_rate_wilson95": [
+    0.2368,
+    0.3706
+   ]
+  },
+  "decision": "Not adopted. It was dropped after a live check flagged a single M7.7 aftershock sequence; the real-catalogue rate above measures how often it fires on mainshock sequences, which are mostly single aftershock sequences with internal structure along the rupture, not merges."
+ },
+ "generated_at": "2026-10-19T08:58:22Z",
  "data": "synthetic (clearly labelled); never shown as real catalogue events",
  "parameters": {
   "eps_km": 50.0,

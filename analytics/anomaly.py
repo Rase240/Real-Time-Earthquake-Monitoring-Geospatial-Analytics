@@ -48,6 +48,15 @@ status "data_incomplete" instead of "not_elevated".
 An elevated region means the observed count is unusually high for that region's
 recent history, often because of one large earthquake and its aftershocks. It is
 not a prediction of a future large earthquake.
+
+Calibration limits (docs/ml_evaluation.md). The test is exact when weekly counts
+are independent NB2 with dispersion <= the alpha used. In simulations it holds
+its level when the dispersion is right; the excess false alerts come from cells
+whose later dispersion exceeds the 2001-2015 floor (a large sequence in a cell
+that was quiet before). Real weekly counts are burstier than any NB: resampling
+real weeks at random makes the detector fire far more often, because a random
+sequence week placed in the window is exactly what it is built to flag. The FDR
+level is therefore a property of the model, not a real-world false-alarm rate.
 """
 import json
 
@@ -59,6 +68,8 @@ from scipy.special import gammaln
 from analytics import regions
 
 DAY_MS = 86_400_000
+METHOD_ID = "conditional_beta_binomial_mle_floor"
+METHOD_ID_NO_FLOOR = "conditional_beta_binomial_reference_window_only"
 MIN_OBSERVED = 3
 DEFAULTS = {"window_weeks": 4, "reference_weeks": 52, "fdr": 0.05, "min_reference_events": 5}
 WINDOW_WEEKS = (1, 2, 4)
@@ -115,13 +126,19 @@ def conditional_p_value(observed, reference_total, k, n, alpha):
     """
     y, x, a = np.broadcast_arrays(np.asarray(observed, float), np.asarray(reference_total, float),
                                   np.asarray(alpha, float))
+    shape = y.shape
+    y, x, a = y.ravel(), x.ravel(), a.ravel()
     total = x + y
     out = np.ones(y.shape)
     pois, nb = (y > 0) & (a <= 0), (y > 0) & (a > 0)
     out[pois] = stats.binom.sf(y[pois] - 1, total[pois], k / (n + k))
     r = 1.0 / a[nb]
     out[nb] = stats.betabinom.sf(y[nb] - 1, total[nb], k * r, n * r)
-    return np.clip(out, 0.0, 1.0)
+    # scipy's beta-binomial sf is 1 - cdf, which cancels to 0 far in the upper tail; sum the pmf there instead.
+    for i in np.flatnonzero(nb & (out < 1e-8)):
+        support = np.arange(y[i], total[i] + 1)
+        out[i] = stats.betabinom.pmf(support, total[i], k / a[i], n / a[i]).sum()
+    return np.clip(out, 0.0, 1.0).reshape(shape)
 
 
 def load_reference(path):

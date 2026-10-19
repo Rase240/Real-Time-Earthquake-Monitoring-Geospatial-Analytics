@@ -1477,9 +1477,8 @@ In these coordinates DBSCAN runs with `eps = 1`. Two events are neighbours when
 * It handles elongated fault-parallel groups.
 * It is deterministic.
 
-HDBSCAN would adapt to regional density differences. However, it is an extra dependency and its
-parameters are less intuitive for the user-facing controls. Depth and magnitude are deliberately left
-out of the distance and only summarised afterwards.
+Alternatives were compared on the same data (see the evaluation below) and none replaced DBSCAN's
+defaults. Depth and magnitude are deliberately left out of the distance and only summarised afterwards.
 
 **What a sequence reports.**
 
@@ -1510,6 +1509,37 @@ The API also returns a plain-language explanation of the linking rule and a limi
 The last row is a real limitation. At the default ε = 50 km the two overlapping sequences chain into
 one. They separate only near ε = 15 km (ARI 0.82), and an even smaller ε starts fragmenting them
 (10 km → 0.58).
+
+**Why they merge, and what was tried.** DBSCAN joins two groups whenever a chain of core events links
+them (density connectivity). Two sequences whose epicentres spread 15 km around centres 60 km apart,
+starting 30 h apart, overlap enough for such a chain. Seven methods were run on twelve scenarios (the
+seven above plus overlaps at 30, 100 and 150 km, one 120 h apart, and a dense/sparse pair), ten seeds
+each:
+
+| Method | Mean ARI | Largest drop vs default | Notes |
+|---|---:|---:|---|
+| DBSCAN 50 km / 72 h (default) | 0.817 | — | merges the 60 km overlap |
+| DBSCAN 25 km / 72 h | 0.844 | 0.011 | separates 100 km; 60 km in 2 of 10 seeds |
+| DBSCAN 50 km / 24 h | 0.824 | 0.008 | separates the 120 h case only |
+| DBSCAN 25 km / 36 h | 0.846 | 0.028 | |
+| DBSCAN 15 km / 72 h | 0.778 | 0.182 | separates 60 km, leaves 5–10 % of members unassigned |
+| HDBSCAN (min cluster 5 / 8) | 0.785 / 0.766 | 0.538 / 0.709 | separates 60 km, but absorbs or drops noise |
+
+The rule was fixed before the run: replace the default only if a method raises the mean ARI and no
+scenario falls by more than 0.02. Two methods passed (25 km / 72 h and 50 km / 24 h). The synthetic
+clusters are compact, though, and real aftershock zones of large earthquakes are long. So both were
+also run on the 99 real M7.5+ mainshocks with at least 20 events in their rupture zone within 30 days.
+This check was added after seeing the synthetic result, and is reported as such. With the default,
+8 % of mainshocks had less than half of their zone's events in their own sequence. With 25 km it was
+25 %, and with 24 h it was 17 %. Both split real sequences more often, so the defaults stay.
+
+A flag-only check was also built: HDBSCAN inside each detected sequence, marking "possibly merged" when
+two or more subgroups each hold 20 % of the members. On synthetic data it flagged all 42 merged
+sequences and 27 of 396 single ones (7 %). But the first live run flagged the single M7.7 Panama
+sequence. Across the catalogue it fired on 53 of 177 M7+ mainshock sequences (30 %). Most of those are
+one aftershock sequence with structure along the rupture, so the flag would mostly be wrong. It is
+evaluated and documented, but not served. At 30 km and 30 h apart, no method separated the two
+sequences: locations and times alone cannot always say which sequence an event belongs to.
 
 ARI and NMI are only meaningful because the labels are known. The real catalogue has no ground truth,
 so no accuracy is claimed for real sequences. Internal indices such as the silhouette score are not
@@ -1591,41 +1621,86 @@ over the GLM only if they are more than 1 % better, because the GLM is easier to
 picked trees at M4.5 (2.3 % better on validation) and the GLM at M5.0 (0.75 %). Deep learning was not
 tried: with nine features and about 100 000 sparse counts, it would add opacity without a plausible gain.
 
-**Uncertainty.** Predictions are means. The predictive distribution is negative binomial (NB2) with a
-single dispersion α fitted by maximum likelihood on the *validation* predictions:
+**Uncertainty.** Predictions are means. The predictive distribution is negative binomial (NB2), Var =
+μ + α(μ)μ², with a dispersion that depends on the predicted mean, α(μ) = exp(a + b·log μ). It is fitted
+by maximum likelihood on the *validation* predictions:
 
 <!-- src: analytics/forecast.py -->
 ```python
-def fit_dispersion(y, mu):
-    """MLE of the NB2 dispersion alpha given observed counts and model means (alpha in [1e-8, 50])."""
-    y, mu = np.asarray(y, float), np.maximum(np.asarray(mu, float), MIN_MU)
-
-    def nll(log_a):
-        return -nb_logpmf(y, mu, float(np.exp(log_a))).sum()
+def fit_dispersion_curve(y, mu):
+    """
+    MLE of the dispersion curve alpha(mu) = exp(a + b log mu) given observed counts and model means.
+    Starts from the constant-alpha MLE (b = 0), so the fit can only match or improve its likelihood.
+    """
 ```
+
+Low-mean cells turned out to be relatively more overdispersed (b ≈ −0.6 at both thresholds). The curve
+was chosen over one constant α on validation data only: each half of the validation period fitted the
+dispersion and the other half scored it. The NB log score fell from 1.0598 to 1.0386 at M4.5, and from
+0.7226 to 0.7188 at M5.0.
+
+**Intervals.** The earlier intervals were equal-tailed NB quantiles, [q₀.₁, q₀.₉] for "80 %". Most cells
+put more than 10 % of their predictive probability on zero, so the lower quantile is 0 and nothing is cut
+from the lower tail: the "80 %" interval actually held 93–97 % of the probability. That, rather than a
+wrong α, is why it covered about 95 % of test weeks. The served intervals are now the shortest integer
+intervals with at least the nominal probability:
+
+<!-- src: analytics/forecast.py -->
+```python
+def interval(mu, dispersion, level):
+    """
+    Shortest integer interval [lo, hi] whose predictive probability is >= level (ties: larger probability).
+    Every lower bound from 0 to the (1 - level) quantile is tried with its smallest valid upper bound.
+    """
+```
+
+No integer interval holds exactly 80 %. The evaluation therefore reports, next to the empirical
+coverage, the *model-implied* coverage: the probability the forecast gives its own interval. A
+calibrated forecast has the two close together, whatever the nominal level.
 
 **Results on the final test period** (M4.5, 46 374 cell-weeks):
 
 | Model | MAE | RMSE | Poisson deviance | NB log score | 80 % coverage |
 |---|---:|---:|---:|---:|---:|
-| Gradient boosting (selected) | 0.933 | 4.644 | 1.985 | 1.091 | 0.958 |
-| Poisson GLM | 0.963 | 4.609 | 2.027 | 1.101 | 0.958 |
-| Historical mean | 0.966 | 4.787 | 2.304 | 1.129 | 0.952 |
-| Rolling 52-week mean | 0.971 | 4.765 | 2.175 | 1.114 | 0.952 |
-| Rolling 4-week mean | 1.003 | 5.019 | 4.030 | 2.015 | 0.916 |
+| Gradient boosting (selected) | 0.933 | 4.644 | 1.985 | 1.065 | 0.889 |
+| Poisson GLM | 0.963 | 4.609 | 2.027 | 1.079 | 0.888 |
+| Historical mean | 0.966 | 4.787 | 2.304 | 1.100 | 0.876 |
+| Rolling 52-week mean | 0.971 | 4.765 | 2.175 | 1.090 | 0.883 |
+| Rolling 4-week mean | 1.003 | 5.019 | 4.030 | 1.917 | 0.850 |
 
-How to read this honestly:
+The means, and so MAE, RMSE and deviance, are exactly as before: only the predictive distribution and
+the intervals changed. How to read this honestly:
 
-* Deviance falls by 13.9 % relative to the historical mean, and the model is better in every test year.
+* Deviance falls by 13.9 % relative to the historical mean. Resampling whole test weeks gives a 95 %
+  interval of 10.3–17.3 %. The model is better in every test year.
 * MAE barely moves, because most cell-weeks are 0 or 1.
-* The model is *worse* than the historical mean in 64 of the 131 cells. The aggregate gain comes from
-  active cells with ongoing sequences, where recent counts carry information.
-* At M5.0 the selected GLM improves deviance by 6.6 % but has a slightly *worse* MAE than the
-  historical mean (0.553 vs 0.546).
-* The 80 % intervals cover about 95 % of test weeks. They are conservative, because discrete counts
-  cannot hit a quantile exactly and one α must serve every cell.
+* The model beats the historical mean in 67 of the 131 cells and the 52-week mean in 94. The gain grows
+  with activity: deviance skill is +3 % in the least active third of cells and +19 % in the most active,
+  where ongoing sequences make recent counts informative.
+* At M5.0 the selected GLM improves deviance by 6.6 % (2.9–9.9 %) but has a slightly *worse* MAE than
+  the historical mean (0.553 vs 0.546). It beats the historical mean in only 24 of 68 cells.
 * The rolling 4-week mean scores badly on deviance because it predicts exactly zero after a quiet month.
   Deviance and log score punish that harshly when an event then occurs. MAE does not.
+
+**Interval calibration on the test period** (selected models):
+
+| Threshold | Construction | Empirical 80 % coverage | Model-implied | Mean width (events) |
+|---|---|---:|---:|---:|
+| M4.5 | equal-tailed, one α (previous) | 0.958 | 0.942 | 2.86 |
+| M4.5 | shortest, α(μ) (served) | 0.889 | 0.863 | 1.61 |
+| M5.0 | equal-tailed, one α (previous) | 0.966 | 0.950 | 1.51 |
+| M5.0 | shortest, α(μ) (served) | 0.889 | 0.869 | 0.60 |
+
+The intervals are 44 % and 60 % narrower, and the test NB log score improved at both thresholds (1.091 →
+1.065, 0.740 → 0.736). They still cover about 2 points more than they claim, and the randomised PIT
+has too few weeks in its top decile (0.077 instead of 0.100): the predictive upper tail is still a
+little too heavy. Coverage also varies by cell, because the dispersion depends on μ but not on the cell.
+
+**Features that were tried and not added.** An Omori-weighted (1/lag) sum of the last 52 weekly counts,
+the largest week in 52, and the 52-week neighbour mean were evaluated on validation only. The rule, fixed
+before the run: add them only if the selected family's validation deviance improves by more than 1 % in
+both halves of the validation period. They improved it by 0.67 % (M4.5) and 0.68 % (M5.0), so the
+feature set is unchanged.
 
 Percentage errors (MAPE) are not reported, because they are undefined when the observed count is zero.
 
@@ -1753,6 +1828,37 @@ and more so with a 26-week reference. Each row below uses the same simulation de
   their 2001–2015 record. The cells with the most false alerts were near Vanuatu (true α 2.8 against a
   2001–2015 MLE of 0.8), the South Sandwich Islands (36.6 against 9.2) and Kaikōura (19.2 against 0.5).
   No per-cell history can anticipate a regime that has not happened there yet.
+* With 1 000 runs per setting the Monte Carlo uncertainty is about ±1.5 points. Four settings, all at
+  M4.5, have their whole 95 % interval above 0.05 (worst 0.081, 0.066–0.100).
+
+**Why false alerts remain: three nulls.** A separate random stream (2 000 runs each) ran the adopted test,
+the moment-floor test, and an oracle that knows each cell's simulated dispersion:
+
+| Null | Adopted | Moment floor | Oracle (true α) |
+|---|---:|---:|---:|
+| NB with 2016–2019 mean and variance (as above) | 0.076 | 0.049 | 0.018 |
+| Same, dispersion capped at each cell's 2001–2015 floor | 0.017 | 0.004 | 0.016 |
+| Real 2016–2019 weeks resampled independently | 0.398 | 0.231 | 0.065 |
+
+* **The test is calibrated when its dispersion is right.** With the cap, and with the oracle, false
+  alerts stay below 2 %. In 64 of the 140 cells the 2016–2019 dispersion exceeds the 2001–2015 floor;
+  the excess comes from them.
+* **The headline 5.6 % depended on the random stream.** On this independent stream the same null gives
+  7.65 %, so about 6–7 % is the honest summary.
+* **Real counts are burstier than any NB.** Resampling real weeks puts a sequence week into the
+  observation window at random, and the detector flags it in 40 % of runs. Even the oracle exceeds 5 %,
+  because a single extreme week is rarer under a variance-matched NB than in reality. Under this
+  construction a "false alert" is a real burst placed at random, which is exactly what the detector is
+  for. The FDR level is therefore a property of the model, not a real-world false-alarm rate, and the
+  API's method text now says so.
+* **What would remove the excess, and why it was not done.** A floor high enough to cover the 2016–2019
+  dispersion of every cell (the moment floor comes close) brings false alerts down to 3.5–4.9 % but cuts
+  held-out detection at +4× from 15 % to 6 %. Neither variant improves both, so the MLE floor stays. A
+  discrete (Tarone-type) multiplicity filter, which drops cells that could never reach significance,
+  was checked too: no tested cell was in that position, so it would change nothing.
+* A numerical fix came out of this work. SciPy's beta-binomial upper tail is computed as 1 − CDF, which
+  rounds to exactly 0 for very strong excesses. Those p-values are now summed directly from the
+  probability mass function, so `p_value` is never reported as 0. No flag changed.
 
 **Power, measured by injection.** Extra events were added to the last week of every unflagged tested
 cell, one cell at a time, in each of the 88 held-out 4-week windows (12 592 trials per factor). The
@@ -1768,7 +1874,13 @@ more precise:
 
 The detector is still conservative. It flags strong excesses, which in practice means active aftershock
 sequences, and misses moderate ones. Most cells' weekly counts are genuinely heavy-tailed, so a +4×
-excess is often within their normal range. The rolling rule catches more, but at about 200 times the
+excess is often within their normal range.
+
+The overall rate hides a sparse-count effect. At +4×, detection is 0.4 % in cells expecting fewer than
+one event per 4-week window and 2.4 % at 1–2 events. Together these are 63 % of the trials, and +4×
+there means only a few extra events. Detection is 16 % at 2–5 expected events, 57 % at 5–10 and 63 % at
+10 or more. No calibrated test can separate three or four extra events from chance among about 140
+cells. The rolling rule catches more, but at about 200 times the
 false-alert rate (0.102 per cell test, against 0.00046).
 
 **Held-out behaviour, 2020–2026.** There is no ground truth on real data. More flags is what higher power
@@ -1871,8 +1983,40 @@ For an out-of-sample check, the model was fitted on days 0.25–30 and used to p
 * 0.94 for the last-week rate held constant;
 * 1.25 for the background rate alone.
 
-The Poisson 95 % intervals covered only 58 % of the outcomes, because they ignore parameter uncertainty
-and secondary sequences. The application therefore shows intervals for parameters, never for future counts.
+The Poisson 95 % intervals covered only 58 % of the outcomes. The prediction itself is not biased
+(median signed log ratio +0.02; the outcome was above it in 51.5 % of sequences), so the intervals were
+too narrow. Two separate causes were measured:
+
+* **Parameter uncertainty.** A fit's parameters are uncertain, and extrapolating from day 30 to day 90
+  amplifies uncertainty in p. Drawing (log K, log c, p) from the fit's covariance (the inverse
+  Hessian, now returned by the API) raises 80 %/95 % coverage from 0.48/0.58 to 0.67/0.82.
+* **Variability beyond Poisson.** Aftershocks trigger their own aftershocks, and the model is only an
+  approximation. Both make real counts vary more than a Poisson process allows, and the relative error
+  does not shrink as sequences grow. With parameter uncertainty alone, sequences with 150 or more fitted
+  events were covered only 41 %/55 %.
+
+A negative-binomial count stage (Var = λ + dλ²) addresses the second cause. Its dispersion d had to be
+calibrated on *other* sequences, so it was fitted by maximum likelihood on the 56 mainshocks before 2013
+(d = 0.19) and applied unchanged to the 47 later ones:
+
+<!-- src: analytics/aftershock.py -->
+```python
+    if dispersion > 0:
+        lam = lam * rng.gamma(1.0 / dispersion, dispersion, len(lam))
+    counts = rng.poisson(lam)
+```
+
+| Mainshocks 2013–2026 (out of sample) | 80 % coverage (95 % CI) | 95 % coverage (95 % CI) | Median 95 % width |
+|---|---:|---:|---:|
+| Poisson, parameters fixed (previous) | 0.51 (0.37–0.65) | 0.62 (0.47–0.74) | 12 events |
+| + parameter uncertainty | 0.68 (0.54–0.80) | 0.83 (0.70–0.91) | 26 events |
+| + NB count stage | **0.81 (0.68–0.90)** | **0.91 (0.80–0.97)** | 34 events |
+
+The calibrated intervals are honest but wide: the upper end of a 95 % interval is typically 12 times the
+lower end. They were validated only for M ≥ 7 mainshocks, M4.5+ events, the rupture-length radius and a
+30 → 90-day horizon. The application lets users choose other magnitudes, radii and windows, so it still
+shows only the fitted decay of past data and parameter confidence intervals, never a forecast of future
+counts. The API labels the parameter intervals as such (`confidence_note`).
 
 The live example from §8.5 was the M7.7 Panama event `us6000u18k` with 67 events at M ≥ 4.5 in 9.3 days.
 Its fit gave p = 1.21 (95 % CI 0.92–1.49), a KS p-value of 0.68 and ΔAIC = 64.7 against the constant-rate model.
@@ -2178,10 +2322,10 @@ has been set up or tested.
 | `tests/test_training.py` | 7 | pytest | none (synthetic catalogues) |
 | `tests/test_api.py` | 39 | pytest + Flask test client | USGS replaced by `FakeUSGS` |
 | `tests/test_geo_regions.py` | 12 | pytest | none |
-| `tests/test_forecast.py` | 16 | pytest | none (synthetic matrices; committed artifacts) |
-| `tests/test_sequences.py` | 14 | pytest | none (synthetic events) |
-| `tests/test_anomaly.py` | 19 | pytest | none |
-| `tests/test_aftershock.py` | 10 | pytest | none (simulated Omori–Utsu sequences) |
+| `tests/test_forecast.py` | 29 | pytest | none (synthetic matrices; committed artifacts) |
+| `tests/test_sequences.py` | 19 | pytest | none (synthetic events) |
+| `tests/test_anomaly.py` | 26 | pytest | none |
+| `tests/test_aftershock.py` | 14 | pytest | none (simulated Omori–Utsu sequences) |
 | `tests/test_api_analytics.py` | 26 | pytest + Flask test client | USGS replaced by `FakeUSGS` (with per-query `handler`) |
 | `tests/frontend/core.test.js` | 10 | `node:test` | none |
 | `tests/frontend/analytics.test.js` | 16 | `node:test` | none |
@@ -2281,6 +2425,13 @@ Steps 12 and 15 used the previous anomaly test (plug-in mean, moment floor). The
 the browser after the conditional test was adopted. §8.5 gives the adopted test's result for the same
 window, computed on the downloaded catalogue.
 
+**Rechecked on 2026-10-19 after the reliability changes** (in-app Chromium, desktop size, a separate
+instance on port 5057 with live USGS data): Model Performance showed every new block from the regenerated
+artifacts without console errors. `/api/forecast` returned 131 cells with the new intervals and the
+dispersion curve, and `/api/anomalies` tested 144 cells (2 elevated) and reported its `method_id`.
+Sequence Explorer found 60 sequences in 30 days of M2.5+. Steps 9, 15 and 16 (layouts, degraded mode,
+mobile) and the hand-offs were not repeated after these changes. The screenshots were taken before them.
+
 **Not verified:** Firefox and Safari, sustained real rate limiting by USGS, long-running memory
 behaviour, and screen-reader output (only the ARIA attributes were reviewed).
 
@@ -2326,7 +2477,7 @@ behaviour, and screen-reader output (only the ARIA attributes were reviewed).
 | Model loading | `torch.load(weights_only=True)`, schema validation | `ModelBundle` |
 | Upstream reliability | Timeouts, bounded retries honouring `Retry-After`, labelled stale fallback | `usgs_client`, `cached_fetch` |
 | Resource bounds | ≤ 2000 events per response; cache ≤ 32 entries; 30-day maximum window | `config.py` |
-| Dependencies | `pip-audit -r requirements-dev.txt`: no known vulnerabilities (2026-10-19) | requirements files |
+| Dependencies | `pip-audit --path .venv/Lib/site-packages` (2026-10-19): no known vulnerabilities in the project's dependencies; 6 advisories in the venv's installer pip 25.0.1 (fixed in pip ≥ 26.2) | requirements files |
 
 ## 12.2 Performance characteristics (measured locally)
 

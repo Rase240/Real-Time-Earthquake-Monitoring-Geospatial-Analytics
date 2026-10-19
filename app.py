@@ -540,7 +540,7 @@ def compute_forecast(threshold):
         reg = model.region_index
         X = RF.features_at(C, L, [RF.LOOKBACK_WEEKS], reg)
         mu = model.predict(X)
-        a = model.alpha
+        a = model.dispersion
         lo80, hi80 = interval(mu, a, 0.8)
         lo95, hi95 = interval(mu, a, 0.95)
         p1 = prob_at_least(1, mu, a)
@@ -567,7 +567,8 @@ def compute_forecast(threshold):
         "origin": ms_iso(origin), "valid_from": ms_iso(origin), "valid_to": ms_iso(origin + 7 * DAY_MS),
         "target": meta["target"],
         "model": {"name": sel, "trained_at": meta["trained_at"], "alpha": meta["alpha"],
-                  "interval_method": "Negative-binomial predictive quantiles (dispersion fitted on validation data)",
+                  "dispersion_curve": meta["dispersion_curve"],
+                  "interval_method": meta["interval_method"],
                   "test_period": meta["periods"]["test"]["from"] + " to " + meta["periods"]["test"]["to"],
                   "test_metrics": {k: meta["test_metrics"][k] for k in (sel, "historical_mean", "rolling_mean_4w",
                                                                          "rolling_mean_52w")},
@@ -646,6 +647,9 @@ def compute_anomalies(threshold, window, ref, fdr):
                 "gaps_window": gaps_win, "gaps_reference": gaps_ref}
 
     out = memoized(("anomaly", threshold, window, ref, fdr, hist["fetched_at"]), compute)
+    has_floor = anomaly_alpha.get(threshold) is not None
+    dispersion_text = ("the larger of the reference-window and 2001-2015 maximum-likelihood estimates" if has_floor else
+                       "the reference-window estimate only, because the 2001-2015 table could not be loaded")
     summary = {
         "threshold": threshold, "window_weeks": window, "reference_weeks": ref, "fdr": fdr,
         "observation_window": {"from": ms_iso(obs_start), "to": ms_iso(end)},
@@ -657,12 +661,15 @@ def compute_anomalies(threshold, window, ref, fdr):
                          "long_term_dispersion": ("2001-2015 per-region estimate" if anomaly_alpha.get(threshold) is not None
                                                   else anomaly_ref_error)},
         "data_window": _data_window(hist, cache, epoch, end),
+        "method_id": AN.METHOD_ID if has_floor else AN.METHOD_ID_NO_FLOOR,
         "method": ("For each 10-degree cell, the observed count in the observation window is compared with the "
                    "same cell's weekly counts in the reference window, modelled as negative binomial (dispersion: "
-                   "the larger of the reference-window and 2001-2015 maximum-likelihood estimates). The one-sided "
+                   f"{dispersion_text}). The one-sided "
                    "p-value is conditional on the total of both windows (beta-binomial), so it does not depend on "
                    "an estimated mean. p-values are adjusted across all tested cells with Benjamini-Hochberg; a "
-                   f"cell is 'elevated' when q <= FDR and at least {AN.MIN_OBSERVED} events were observed."),
+                   f"cell is 'elevated' when q <= FDR and at least {AN.MIN_OBSERVED} events were observed. The FDR "
+                   "level holds when weekly counts follow that model; real sequences are burstier, so it is not a "
+                   "guaranteed real-world false-alarm rate (docs/ml_evaluation.md)."),
         "interpretation": ("Elevated observed activity means more events than this cell's recent history makes "
                            "likely, usually because of an ongoing sequence. It is not a prediction of a future "
                            "large earthquake."),
@@ -787,7 +794,9 @@ def model_performance():
         forecasts[f"{t:.1f}"] = {"status": "loaded", **{k: meta[k] for k in (
             "trained_at", "target", "selected_model", "selection_rule", "alpha", "dispersion_method", "periods",
             "samples", "eligibility", "validation_metrics", "test_metrics", "test_by_year", "test_reliability",
-            "deviance_skill_vs", "features", "limitations", "glm_coefficients", "data")},
+            "deviance_skill_vs", "features", "limitations", "glm_coefficients", "data", "dispersion_curve",
+            "dispersion_evidence", "interval_method", "deviance_skill_ci95_week_bootstrap", "test_regional_summary",
+            "test_selected_with_constant_alpha")},
             "regions": len(meta["regions"]),
             "test_by_region": [{"id": r["id"], "label": r["label"], "mae": r["test"]["mae"],
                                 "poisson_deviance": r["test"]["poisson_deviance"], "coverage_80": r["test"]["coverage_80"],

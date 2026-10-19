@@ -23,8 +23,19 @@ Why DBSCAN: the number of sequences is unknown, most catalogue events are not
 part of any dense group, and groups have irregular shapes along faults. DBSCAN
 needs no cluster count, labels isolated events as noise, and is deterministic.
 Its main weakness, a single density threshold for regions with very different
-background rates, is reported via `limitations`. HDBSCAN would adapt to density
-but is less predictable for users tuning parameters and was not needed.
+background rates, is reported via `limitations`.
+
+Merged sequences. DBSCAN joins two sequences whenever a chain of core events
+links them, so overlapping sequences (synthetic benchmark: centres 60 km and
+30 h apart, 15 km spread) merge at the default parameters. Alternatives were
+compared on identical synthetic data and on real M7.5+ aftershock zones
+(docs/ml_evaluation.md): smaller eps separates the synthetic overlap but splits
+real aftershock sequences about three times as often; HDBSCAN separates it but
+absorbs or drops noise elsewhere; an HDBSCAN "substructure" check inside each
+sequence flagged every synthetic merge but also about a third of real M7+
+aftershock sequences, so it would mostly flag rupture geometry. None was
+adopted. Catalogue locations and times alone cannot always say which sequence an
+event belongs to, and the limitation is stated instead.
 
 Depth is not part of the distance: with the global catalogue's depth
 uncertainties, adding it would mostly split shallow sequences arbitrarily.
@@ -181,6 +192,8 @@ def detect(events, eps_km=DEFAULTS["eps_km"], eps_hours=DEFAULTS["eps_hours"], m
             "form sequences more easily than sparsely monitored ones.",
             "Border events that are within reach of two sequences are assigned to only one "
             "(counted as ambiguous_border_events).",
+            "Sequences that overlap closely in space and time (tens of km, about a day) can be merged into one; "
+            "no tested automatic check separated them reliably on real data.",
             "Sequences can be cut at the start or end of the data window and by the magnitude threshold.",
             "Depth and magnitude are not used in the distance.",
         ],

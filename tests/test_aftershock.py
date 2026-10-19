@@ -3,6 +3,7 @@ import math
 
 import numpy as np
 import pytest
+from scipy import stats
 
 from analytics import aftershock as AS
 from analytics import geo
@@ -101,6 +102,50 @@ def test_curve_stays_inside_fit_window():
     fit = AS.fit_omori(t, 0.25, 30.0, 0.0)
     pts = AS.curve(fit, [0.0, 0.1, 1.0, 10.0, 30.0, 100.0])
     assert pts[0]["from"] == 0.25 and pts[-1]["to"] == 30.0 and all(p["rate_per_day"] > 0 for p in pts)
+
+
+def test_covariance_matches_standard_errors_and_labels_parameter_intervals():
+    t = omori_times(K=40.0, c=0.05, p=1.1, t0=0.0, t1=60.0, seed=3)
+    fit = AS.fit_omori(t, 0.0, 60.0, mu=0.0)
+    cov = fit["covariance"]
+    V = np.asarray(cov["matrix"])
+    assert cov["parameters"] == ["log_K", "log_c", "p"] and np.allclose(V, V.T)
+    assert np.all(np.linalg.eigvalsh(V) > 0)
+    assert np.sqrt(V[-1, -1]) == pytest.approx(fit["standard_errors"]["p"], rel=1e-3)
+    assert "not prediction intervals" in fit["confidence_note"]
+
+
+def test_predictive_count_plugin_is_poisson_and_uncertainty_widens_it():
+    t = omori_times(K=40.0, c=0.05, p=1.1, t0=0.0, t1=30.0, seed=11)
+    fit = AS.fit_omori(t, 0.25, 30.0, 0.0)
+    assert fit["status"] == "fitted", fit["reasons"]
+    lam = AS.expected_count(fit, 30, 90)
+    plug = AS.predictive_count(fit, 30, 90, include_parameter_uncertainty=False, n_draws=20000)
+    assert plug["interval_95"][0] == pytest.approx(stats.poisson.ppf(0.025, lam), abs=1)
+    assert plug["interval_95"][1] == pytest.approx(stats.poisson.ppf(0.975, lam), abs=1)
+    unc = AS.predictive_count(fit, 30, 90, n_draws=20000)
+    nb = AS.predictive_count(fit, 30, 90, n_draws=20000, dispersion=0.3)
+    width = {k: v["interval_95"][1] - v["interval_95"][0] for k, v in (("p", plug), ("u", unc), ("n", nb))}
+    assert width["p"] <= width["u"] < width["n"]
+    assert AS.predictive_count(fit, 30, 90, seed=5) == AS.predictive_count(fit, 30, 90, seed=5)     # deterministic
+
+
+def test_predictive_count_needs_covariance():
+    assert AS.predictive_count({"parameters": None, "background_rate_per_day": 0.0}, 30, 90) is None
+    fit = {"parameters": {"K": 10.0, "c_days": 0.01, "p": 1.1}, "background_rate_per_day": 0.0, "covariance": None}
+    assert AS.predictive_count(fit, 30, 90) is None
+    assert AS.predictive_count(fit, 30, 90, include_parameter_uncertainty=False) is not None
+
+
+def test_count_dispersion_calibration_recovers_simulated_value():
+    from analytics.evaluation import calibrate_count_dispersion
+    rng = np.random.default_rng(6)
+    lam = rng.uniform(5, 200, 400)
+    d = 0.25
+    y = rng.poisson(lam * rng.gamma(1 / d, d, 400))
+    draws = [np.full(50, v) for v in lam]
+    assert calibrate_count_dispersion(y, draws) == pytest.approx(d, rel=0.3)
+    assert calibrate_count_dispersion(rng.poisson(lam), draws) < 0.02
 
 
 def test_analyse_end_to_end_and_truncation_flag():
